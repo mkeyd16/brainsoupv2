@@ -32,7 +32,7 @@ class TestAI(unittest.TestCase):
             relationships_summary="Sarah: Friend"
         )
         self.assertIn("Alex", prompt)
-        self.assertIn("REALITY & IDENTITY RULES", prompt)
+        self.assertIn("STRICT CONVERSATION & IDENTITY RULES", prompt)
         self.assertIn("Met Sarah yesterday.", prompt)
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@ import sys
 import os
 from pathlib import Path
 
-# Ensure project root directory is on sys.path and set as current working directory
 PROJECT_ROOT = Path(__file__).parent.resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -16,7 +15,7 @@ from launch import verify_and_setup_environment
 from ai.model import ModelManager
 from world.world import World
 from storage.save_manager import SaveManager
-from ui.cli import TerminalUI
+from ui.gui import TkinterUI
 
 logging.basicConfig(
     filename=config.LOG_FILE,
@@ -66,7 +65,8 @@ def main():
     auto_thread.start()
     autosave_thread.start()
 
-    ui = TerminalUI(world)
+    # Launch Desktop GUI Window
+    ui = TkinterUI(world)
     try:
         ui.start()
     finally:

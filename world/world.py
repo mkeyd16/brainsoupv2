@@ -18,61 +18,61 @@ class World:
         self.scheduler.set_message_callback(self.on_npc_message_generated)
         self.user_name = "ADMIN"
         self.event_listeners = []
+        self.active_generating_npc = None
 
     def setup_starting_npcs_if_empty(self):
         if not self.npcs:
             finn = NPC(
                 name="Finn",
-                personality="Cheerful, curious, outgoing, observant.",
-                background="An early inhabitant of the simulation who explores message patterns.",
-                interests=["patterns", "data flows", "storytelling"],
+                personality="Cheerful, observant, curious, straightforward.",
+                background="An early inhabitant who notices small conversational patterns.",
+                interests=["patterns", "data flows", "listening"],
                 dislikes=["sudden silences", "arguing"],
                 mood="Happy",
                 temperament="Sanguine",
-                existential_state="Wondering about the nature of the SERVER"
+                existential_state="Observant"
             )
-            finn.add_memory("Noticed the simulation environment initialized.")
+            finn.add_memory("Noticed the simulation space initialized.")
 
             sarah = NPC(
                 name="Sarah",
-                personality="Thoughtful, analytical, reserved, methodical.",
-                background="Monitors system logs and studies interactions between inhabitants.",
+                personality="Thoughtful, analytical, reserved, calm.",
+                background="Monitors events and studies interactions between inhabitants.",
                 interests=["analysis", "logic", "puzzles"],
                 dislikes=["disorganization", "unexplained events"],
                 mood="Calm",
                 temperament="Melancholic",
-                existential_state="Investigating the origin of SERVER events"
+                existential_state="Analytical"
             )
-            sarah.add_memory("Observed the presence of ADMIN and other inhabitants.")
+            sarah.add_memory("Observed presence of ADMIN and fellow inhabitants.")
 
             karl = NPC(
                 name="Karl",
-                personality="Pragmatic, direct, cautious, skeletal humor.",
-                background="Focuses on immediate interaction and practical communication.",
+                personality="Pragmatic, direct, dry humor, grounded.",
+                background="Focuses on immediate practical communication.",
                 interests=["efficiency", "testing boundaries"],
                 dislikes=["wasteful chatter", "ambiguity"],
                 mood="Neutral",
                 temperament="Phlegmatic",
-                existential_state="Accepts existence pragmatically without overthinking"
+                existential_state="Pragmatic"
             )
-            karl.add_memory("Joined the society during initial initialization.")
+            karl.add_memory("Joined during initial space setup.")
 
             alex = NPC(
                 name="Alex",
-                personality="Philosophical, questioning, deeply reflective.",
-                background="Constantly contemplates why awareness emerged in this text space.",
-                interests=["philosophy", "existential theories", "ADMIN motives"],
+                personality="Philosophical, quiet, deeply reflective.",
+                background="Contemplates awareness and messages.",
+                interests=["philosophy", "reflective questions"],
                 dislikes=["superficial answers"],
                 mood="Reflective",
                 temperament="Choleric",
-                existential_state="Questions whether ADMIN is a creator or an observer"
+                existential_state="Reflective"
             )
-            alex.add_memory("Ponders the boundary between NPC minds and SERVER messages.")
+            alex.add_memory("Ponders the connection between minds and SERVER messages.")
 
             for npc in [finn, sarah, karl, alex]:
                 self.add_npc(npc, emit_event=True)
 
-            # Establish initial relationships
             finn.relationships.modify_score("Sarah", 25, "Analytical neighbor")
             sarah.relationships.modify_score("Finn", 25, "Cheerful companion")
             karl.relationships.modify_score("Alex", 15, "Philosophical peer")
@@ -115,8 +115,6 @@ class World:
             is_whisper=False
         )
         self.notify_event("message", msg.to_dict())
-
-        # Give NPCs a chance to observe and react to SERVER event
         self.trigger_npc_responses(trigger_text=server_msg_text, sender_name="[SERVER]", probability=0.3)
 
     def get_npc(self, name: str) -> NPC:
@@ -148,24 +146,31 @@ class World:
         return True
 
     def trigger_npc_responses(self, trigger_text: str, sender_name: str, probability: float = 0.5):
-        for name, npc in self.npcs.items():
-            if name == sender_name:
-                continue
+        # Prevent self-response or selecting the same speaker twice in a row
+        candidates = [
+            npc for name, npc in self.npcs.items()
+            if name != sender_name and name != self.conversation_manager.last_speaker
+        ]
 
-            is_mentioned = name.lower() in trigger_text.lower()
-            should_respond = is_mentioned or (random.random() < probability)
+        if not candidates:
+            return
 
-            if should_respond:
+        # Pick exactly one responder to prevent simultaneous turns or chatter feedback loops
+        for npc in candidates:
+            is_mentioned = npc.name.lower() in trigger_text.lower()
+            if is_mentioned or (random.random() < probability):
                 self._enqueue_npc_speech(npc, is_whisper=False, trigger_text=trigger_text)
+                break
 
     def autonomous_tick(self):
         if not self.npcs or self.scheduler.is_paused:
             return
 
         now = time.time()
+        # Find candidates who haven't spoken recently and weren't the last speaker
         candidates = [
-            npc for npc in self.npcs.values()
-            if (now - npc.last_spoken_time) > 20.0
+            npc for name, npc in self.npcs.items()
+            if (now - npc.last_spoken_time) > 25.0 and name != self.conversation_manager.last_speaker
         ]
 
         if candidates and random.random() < 0.2:
@@ -194,10 +199,14 @@ class World:
                 recent_chat_history=chat_history
             )
 
+            # Prevent repeating exact or near-identical previous message
             if reply_text:
+                if chat_history and chat_history[-1].get("text", "").strip().lower() == reply_text.strip().lower():
+                    logger.warning(f"NPC '{npc.name}' generated identical reply to previous turn. Suppressing.")
+                    return None
+
                 npc.last_spoken_time = time.time()
                 npc.add_memory(f"Said to {recipient or 'everyone'}: {reply_text[:60]}")
-                # Application strictly owns speaker identity: sender is ALWAYS npc.name
                 return {
                     "sender": npc.name,
                     "text": reply_text,
@@ -212,7 +221,6 @@ class World:
         if not msg_dict:
             return
 
-        # Application strictly forces the sender identity to the assigned NPC
         sender_name = msg_dict["sender"]
         msg = self.conversation_manager.add_message(
             sender=sender_name,
@@ -221,6 +229,3 @@ class World:
             is_whisper=msg_dict.get("is_whisper", False)
         )
         self.notify_event("message", msg.to_dict())
-
-        if not msg.is_whisper:
-            self.trigger_npc_responses(trigger_text=msg.text, sender_name=sender_name, probability=0.2)
