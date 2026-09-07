@@ -79,7 +79,6 @@ class TestLaunchBootstrap(unittest.TestCase):
 
     @patch("launch.verify_python_executable")
     def test_find_supported_python_executable_prefers_py_launcher(self, mock_verify):
-        # mock_verify returns False for bootstrapped dir, True for py -3.12
         mock_verify.side_effect = lambda cmd: "py -3.12" in str(cmd) or cmd == ["py", "-3.12"]
 
         v314 = DummyVersionInfo(3, 14, 6)

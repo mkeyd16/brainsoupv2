@@ -20,7 +20,7 @@ SUPPORTED_PYTHON_MAX = (3, 13)
 OFFICIAL_PYTHON_INSTALLER_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
-PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.30/llama_cpp_python-0.3.30-py3-none-win_amd64.whl"
+PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35/llama_cpp_python-0.3.35-py3-none-win_amd64.whl"
 
 def check_python_version(sys_version_info=None) -> bool:
     version_info = sys_version_info or sys.version_info
@@ -128,7 +128,6 @@ def bootstrap_official_python() -> str:
 
     print(f"Installing official Python 3.12 runtime with Tkinter into {PYTHON_RUNTIME_DIR}...")
     try:
-        # Silent standalone per-user installation into runtime/python312
         cmd = [
             str(installer_path),
             "/quiet",
@@ -257,10 +256,11 @@ def check_dependencies(python_exec: str = None) -> bool:
         print(f"Missing packages detected: {missing}")
         print("Installing required packages from requirements.txt...")
 
-        cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", "--only-binary=:all:", "-r", str(config.BASE_DIR / "requirements.txt")]
-
+        # If on Windows x64 and llama-cpp-python is missing, install the prebuilt v0.3.35 wheel directly alongside requirements.txt
         if sys.platform == "win32" and "llama-cpp-python" in missing:
-            cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", PREBUILT_LLAMA_CPP_WHEEL_URL, "-r", str(config.BASE_DIR / "requirements.txt")]
+            cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", PREBUILT_LLAMA_CPP_WHEEL_URL, "requests==2.32.3", "tqdm==4.66.5"]
+        else:
+            cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", "--only-binary=:all:", "-r", str(config.BASE_DIR / "requirements.txt")]
 
         try:
             subprocess.check_call(cmd)
