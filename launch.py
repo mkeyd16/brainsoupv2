@@ -14,6 +14,7 @@ SUPPORTED_PYTHON_MAX = (3, 13)
 OFFICIAL_PYTHON_ZIP_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
+PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.30/llama_cpp_python-0.3.30-py3-none-win_amd64.whl"
 
 def check_python_version(sys_version_info=None) -> bool:
     version_info = sys_version_info or sys.version_info
@@ -197,6 +198,10 @@ def ensure_venv() -> str:
         print("ERROR: Could not locate or bootstrap a supported Python 3.10-3.12 interpreter.")
         return None
 
+    # If supported_exec is the embedded runtime, use it directly as the isolated environment
+    if str(PYTHON_RUNTIME_DIR) in str(supported_exec):
+        return supported_exec
+
     print(f"Creating local virtual environment in {venv_dir} using {supported_exec}...")
     if isinstance(supported_exec, str):
         cmd = supported_exec.split() + ["-m", "venv", str(venv_dir)]
@@ -245,7 +250,14 @@ def check_dependencies(python_exec: str = None) -> bool:
     if missing:
         print(f"Missing packages detected: {missing}")
         print("Installing required packages from requirements.txt...")
-        cmd = [target_python, "-m", "pip", "install", "--prefer-binary", "-r", str(config.BASE_DIR / "requirements.txt")]
+
+        # Force wheel-only installation (--only-binary=:all:) to prevent .tar.gz C++ compilation
+        cmd = [target_python, "-m", "pip", "install", "--prefer-binary", "--only-binary=:all:", "-r", str(config.BASE_DIR / "requirements.txt")]
+
+        # For Windows x64 platforms, if pypi wheel is not found directly, pass official release wheel URL
+        if sys.platform == "win32" and "llama-cpp-python" in missing:
+            cmd = [target_python, "-m", "pip", "install", "--prefer-binary", PREBUILT_LLAMA_CPP_WHEEL_URL, "-r", str(config.BASE_DIR / "requirements.txt")]
+
         try:
             subprocess.check_call(cmd)
             print("Pip install command executed successfully.")
