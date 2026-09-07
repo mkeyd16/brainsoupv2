@@ -1,9 +1,17 @@
 import unittest
 import tempfile
 import urllib.error
+import sys
+import subprocess
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
-from launch import download_file_with_resume
+from launch import (
+    download_file_with_resume,
+    check_python,
+    check_dependencies,
+    verify_and_setup_environment
+)
 
 class DummyHeader:
     def __init__(self, headers_dict):
@@ -32,9 +40,70 @@ class DummyResponse:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-class TestDownloader(unittest.TestCase):
+class DummyVersionInfo:
+    def __init__(self, major, minor, micro):
+        self.major = major
+        self.minor = minor
+        self.micro = micro
 
-    def test_existing_valid_file(self):
+    def __lt__(self, other):
+        return (self.major, self.minor) < other
+
+    def __ge__(self, other):
+        return (self.major, self.minor) >= other
+
+class TestLaunchBootstrap(unittest.TestCase):
+
+    def test_python_version_check_supported(self):
+        v312 = DummyVersionInfo(3, 12, 0)
+        self.assertTrue(check_python(v312))
+
+        v310 = DummyVersionInfo(3, 10, 5)
+        self.assertTrue(check_python(v310))
+
+    def test_python_version_check_unsupported(self):
+        v314 = DummyVersionInfo(3, 14, 6)
+        self.assertFalse(check_python(v314))
+
+        v39 = DummyVersionInfo(3, 9, 2)
+        self.assertFalse(check_python(v39))
+
+    @patch("subprocess.check_call")
+    def test_check_dependencies_already_present(self, mock_check_call):
+        with patch.dict("sys.modules", {"llama_cpp": MagicMock(), "requests": MagicMock()}):
+            result = check_dependencies()
+            self.assertTrue(result)
+            mock_check_call.assert_not_called()
+
+    @patch("subprocess.check_call")
+    def test_check_dependencies_missing_installation_success(self, mock_check_call):
+        mock_check_call.return_value = 0
+        fake_llama_cpp = MagicMock()
+
+        # import_module called once initially (fails) and once after pip install (succeeds)
+        def mock_import(name):
+            if name == "llama_cpp":
+                if mock_import.call_count == 0:
+                    mock_import.call_count += 1
+                    raise ImportError("No module named 'llama_cpp'")
+                return fake_llama_cpp
+            return MagicMock()
+
+        mock_import.call_count = 0
+
+        with patch("importlib.import_module", side_effect=mock_import):
+            result = check_dependencies()
+            self.assertTrue(result)
+            mock_check_call.assert_called_once()
+
+    @patch("subprocess.check_call")
+    def test_check_dependencies_missing_installation_failure(self, mock_check_call):
+        mock_check_call.side_effect = subprocess.CalledProcessError(1, ["pip", "install"])
+        with patch("importlib.import_module", side_effect=ImportError("No module named 'llama_cpp'")):
+            result = check_dependencies()
+            self.assertFalse(result)
+
+    def test_existing_valid_model_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dest = Path(tmpdir) / "model.gguf"
             dest.write_bytes(b"A" * 100)
@@ -44,9 +113,8 @@ class TestDownloader(unittest.TestCase):
     def test_existing_corrupt_file_replaced(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dest = Path(tmpdir) / "model.gguf"
-            dest.write_bytes(b"A" * 10)  # Too small (< 50)
+            dest.write_bytes(b"A" * 10)
 
-            # Mock urlopen
             data = b"X" * 60
             mock_resp = DummyResponse([data], {"Content-Length": "60"})
 
@@ -65,7 +133,7 @@ class TestDownloader(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             dest = Path(tmpdir) / "model.gguf"
             data = b"B" * 80
-            mock_resp = DummyResponse([data], {})  # No Content-Length
+            mock_resp = DummyResponse([data], {})
 
             import urllib.request
             original_urlopen = urllib.request.urlopen

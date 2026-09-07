@@ -3,41 +3,71 @@ import sys
 import subprocess
 import urllib.request
 import time
+import importlib
 from pathlib import Path
 import config
 
-def check_python():
-    print(f"Python version: {sys.version.split()[0]} - OK")
+SUPPORTED_PYTHON_MIN = (3, 10)
+SUPPORTED_PYTHON_MAX = (3, 13)
+
+def check_python(sys_version_info=None) -> bool:
+    version_info = sys_version_info or sys.version_info
+    ver_str = f"{version_info.major}.{version_info.minor}.{version_info.micro}"
+
+    if version_info < SUPPORTED_PYTHON_MIN or version_info >= SUPPORTED_PYTHON_MAX:
+        print("==================================================")
+        print(f"ERROR: Unsupported Python version detected: {ver_str}")
+        print("wrld.v2 requires Python 3.10, 3.11, or 3.12 for prebuilt llama-cpp-python wheels.")
+        print(f"Python {ver_str} lacks prebuilt binary wheels for llama-cpp-python, requiring C++/CMake build toolchains (NMake/MSVC).")
+        print("Please install Python 3.10, 3.11, or 3.12 to enable 1-click startup without C++ compilers.")
+        print("==================================================")
+        return False
+
+    print(f"Python version: {ver_str} - OK")
     return True
 
-def check_dependencies():
+def check_dependencies() -> bool:
     print("Checking Python dependencies...")
     missing = []
     try:
-        import llama_cpp
+        importlib.import_module("llama_cpp")
     except ImportError:
         missing.append("llama-cpp-python")
 
     try:
-        import requests
+        importlib.import_module("requests")
     except ImportError:
         missing.append("requests")
 
     if missing:
         print(f"Missing packages detected: {missing}")
-        print("Installing required packages...")
+        print("Installing required packages from requirements.txt...")
         cmd = [sys.executable, "-m", "pip", "install", "-r", str(config.BASE_DIR / "requirements.txt")]
-        subprocess.check_call(cmd)
-        print("Dependencies installed successfully.")
+        try:
+            subprocess.check_call(cmd)
+            print("Pip install command executed successfully.")
+        except subprocess.CalledProcessError as e:
+            print("==================================================")
+            print(f"ERROR: Failed to install required Python dependencies (exit code {e.returncode}).")
+            print("Ensure you are running a supported Python version (3.10-3.12) with internet access.")
+            print("==================================================")
+            return False
+
+        try:
+            importlib.import_module("llama_cpp")
+            print("Post-install verification: llama_cpp imported successfully - OK")
+        except ImportError:
+            print("==================================================")
+            print("ERROR: Post-install import verification failed for 'llama_cpp'.")
+            print("Package installation appeared to complete, but llama_cpp is not importable.")
+            print("==================================================")
+            return False
     else:
         print("Dependencies: OK")
+
     return True
 
 def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
-    """
-    Downloads file using .part temporary path and resume support if possible.
-    Outputs progress with automation-friendly newline-terminated messages.
-    """
     dest_path = Path(dest_path)
     part_path = dest_path.with_suffix(".part")
 
@@ -59,7 +89,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
     downloaded_bytes = 0
     if part_path.exists():
         downloaded_bytes = part_path.stat().st_size
-        # If part file is already bigger than expected or equal to target size, check if valid
         if downloaded_bytes >= min_size:
             part_path.rename(dest_path)
             print(f"Part file was complete. Promoted to {dest_path.name}")
@@ -74,7 +103,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
         with urllib.request.urlopen(req, timeout=30) as response:
             status_code = getattr(response, "status", 200)
 
-            # If Range request wasn't supported (200 returned instead of 206), reset download
             if "Range" in headers and status_code == 200:
                 print("Server does not support range requests. Restarting download...")
                 downloaded_bytes = 0
@@ -84,7 +112,7 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
             content_length = int(content_length_header) if content_length_header and content_length_header.isdigit() else None
             total_size = (downloaded_bytes + content_length) if content_length else None
 
-            block_size = 1024 * 1024  # 1MB blocks
+            block_size = 1024 * 1024
             last_report_bytes = downloaded_bytes
             last_report_time = time.time()
 
@@ -98,7 +126,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
                     f.write(buffer)
                     downloaded_bytes += len(buffer)
 
-                    # Periodically output status on a new line (every 50MB or every 5 seconds)
                     now = time.time()
                     if (downloaded_bytes - last_report_bytes >= 50 * 1024 * 1024) or (now - last_report_time >= 5.0):
                         if total_size and total_size > 0:
@@ -114,7 +141,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
     except Exception as e:
         print(f"Download error encountered: {e}")
 
-    # Final verification
     if part_path.exists():
         actual_size = part_path.stat().st_size
         if actual_size >= min_size:
@@ -128,13 +154,16 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
         print("Error: Temporary file .part does not exist after download attempt.")
         return False
 
-def verify_and_setup_environment():
+def verify_and_setup_environment() -> bool:
     print("==================================================")
     print("Checking wrld.v2 installation...")
     print("==================================================")
 
-    check_python()
-    check_dependencies()
+    if not check_python():
+        return False
+
+    if not check_dependencies():
+        return False
 
     model_success = download_file_with_resume(
         url=config.MODEL_URL,
@@ -144,11 +173,13 @@ def verify_and_setup_environment():
 
     if not model_success:
         print("ERROR: Could not verify or download the AI model file.")
-        sys.exit(1)
+        return False
 
     print("Checking AI runtime... OK")
     print("Startup verification completed successfully!\n")
     return True
 
 if __name__ == "__main__":
-    verify_and_setup_environment()
+    success = verify_and_setup_environment()
+    if not success:
+        sys.exit(1)
