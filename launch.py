@@ -114,8 +114,13 @@ def bootstrap_official_python() -> str:
     PYTHON_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     target_python = PYTHON_RUNTIME_DIR / ("python.exe" if sys.platform == "win32" else "python")
 
-    if verify_python_executable(target_python):
-        return str(target_python)
+    print(f"Checking for existing bootstrapped Python runtime at {target_python}...")
+    if target_python.exists():
+        if verify_python_executable(target_python):
+            print(f"Found valid bootstrapped Python 3.12 with Tkinter at {target_python}")
+            return str(target_python)
+        else:
+            print(f"Bootstrapped runtime at {target_python} exists but failed Python version or Tkinter import check.")
 
     print("No supported Python 3.10-3.12 with Tkinter found on host system.")
     print("Automatically downloading official Python 3.12.8 installer from python.org...")
@@ -135,25 +140,50 @@ def bootstrap_official_python() -> str:
             "Include_tcltk=1",
             "Include_pip=1",
             "Include_test=0",
-            f"TargetDir={PYTHON_RUNTIME_DIR}"
+            f"TargetDir={PYTHON_RUNTIME_DIR.resolve()}"
         ]
-        res = subprocess.run(cmd, capture_output=True, timeout=120)
+        print(f"Running installer: {' '.join(cmd)}")
+        res = subprocess.run(cmd, capture_output=True, timeout=180)
+        print(f"Installer process finished with exit code: {res.returncode}")
         if res.returncode != 0:
-            print(f"Installer completed with status code {res.returncode}. Output: {res.stderr.decode(errors='ignore')}")
+            print(f"Installer stderr output: {res.stderr.decode(errors='ignore')}")
 
     except Exception as e:
-        print(f"ERROR: Failed to set up bootstrapped Python runtime: {e}")
+        print(f"ERROR: Failed during Python installer execution: {e}")
+        return None
+
+    print(f"Validating target Python executable at {target_python}...")
+    if not target_python.exists():
+        print(f"ERROR: Python installer completed, but expected executable {target_python} was not created in target directory.")
+        return None
+
+    # Check python.exe directly
+    try:
+        res_ver = subprocess.run([str(target_python), "--version"], capture_output=True, text=True, timeout=5)
+        print(f"Bootstrapped executable version: {res_ver.stdout.strip()}")
+    except Exception as e:
+        print(f"ERROR: Could not query version of {target_python}: {e}")
+
+    try:
+        res_tk = subprocess.run([str(target_python), "-c", "import sys, tkinter; print('Tkinter import successful - OK')"], capture_output=True, text=True, timeout=5)
+        print(f"Bootstrapped executable Tkinter test output: {res_tk.stdout.strip()}")
+        if res_tk.returncode != 0:
+            print(f"ERROR: Tkinter test failed on bootstrapped Python executable: {res_tk.stderr.strip()}")
+            return None
+    except Exception as e:
+        print(f"ERROR: Failed to test Tkinter on bootstrapped Python executable: {e}")
         return None
 
     if verify_python_executable(target_python):
-        print(f"Bootstrapped Python 3.12 with Tkinter successfully at {target_python}")
+        print(f"Bootstrapped Python 3.12 with Tkinter successfully verified at {target_python}")
         return str(target_python)
 
+    print(f"ERROR: Verification failed for bootstrapped Python executable at {target_python}")
     return None
 
 def find_supported_python_executable() -> str:
     bootstrapped = PYTHON_RUNTIME_DIR / ("python.exe" if sys.platform == "win32" else "python")
-    if verify_python_executable(bootstrapped):
+    if bootstrapped.exists() and verify_python_executable(bootstrapped):
         return str(bootstrapped)
 
     if check_python_version() and check_module_importable(sys.executable, "tkinter"):
@@ -198,7 +228,7 @@ def ensure_venv() -> str:
         print("ERROR: Could not locate or bootstrap a supported Python 3.10-3.12 interpreter with Tkinter.")
         return None
 
-    if str(PYTHON_RUNTIME_DIR) in str(supported_exec):
+    if str(PYTHON_RUNTIME_DIR.resolve()) in str(Path(supported_exec).resolve()):
         return supported_exec
 
     print(f"Creating local virtual environment in {venv_dir} using {supported_exec}...")
@@ -239,9 +269,8 @@ def check_dependencies(python_exec: str = None) -> bool:
     print("Checking Python dependencies...")
     target_python = python_exec or sys.executable
 
-    # Verify Tkinter first
     if not check_module_importable(target_python, "tkinter"):
-        print("Tkinter is missing in the target Python environment.")
+        print(f"Tkinter is missing in the target Python environment: {target_python}")
         return False
     print("Tkinter import successful - OK")
 
@@ -256,7 +285,6 @@ def check_dependencies(python_exec: str = None) -> bool:
         print(f"Missing packages detected: {missing}")
         print("Installing required packages from requirements.txt...")
 
-        # If on Windows x64 and llama-cpp-python is missing, install the prebuilt v0.3.35 wheel directly alongside requirements.txt
         if sys.platform == "win32" and "llama-cpp-python" in missing:
             cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", PREBUILT_LLAMA_CPP_WHEEL_URL, "requests==2.32.3", "tqdm==4.66.5"]
         else:

@@ -103,7 +103,7 @@ class TestLaunchBootstrap(unittest.TestCase):
 
     @patch("subprocess.check_call")
     def test_check_dependencies_already_present(self, mock_check_call):
-        with patch.dict("sys.modules", {"llama_cpp": MagicMock(), "requests": MagicMock()}):
+        with patch.dict("sys.modules", {"llama_cpp": MagicMock(), "requests": MagicMock(), "tkinter": MagicMock()}):
             result = check_dependencies()
             self.assertTrue(result)
             mock_check_call.assert_not_called()
