@@ -17,10 +17,10 @@ import config
 SUPPORTED_PYTHON_MIN = (3, 10)
 SUPPORTED_PYTHON_MAX = (3, 13)
 
-OFFICIAL_PYTHON_ZIP_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
+OFFICIAL_PYTHON_INSTALLER_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
-PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35/llama_cpp_python-0.3.35-py3-none-win_amd64.whl"
+PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.30/llama_cpp_python-0.3.30-py3-none-win_amd64.whl"
 
 def check_python_version(sys_version_info=None) -> bool:
     version_info = sys_version_info or sys.version_info
@@ -33,7 +33,7 @@ def verify_python_executable(exec_cmd) -> bool:
         else:
             cmd = [str(c) for c in exec_cmd]
         res = subprocess.run(
-            cmd + ["-c", "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
+            cmd + ["-c", "import sys, tkinter; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
             capture_output=True,
             text=True,
             timeout=5
@@ -117,39 +117,37 @@ def bootstrap_official_python() -> str:
     if verify_python_executable(target_python):
         return str(target_python)
 
-    print("No supported Python (3.10-3.12) found on host system.")
-    print("Automatically downloading official Python 3.12.8 runtime from python.org...")
+    print("No supported Python 3.10-3.12 with Tkinter found on host system.")
+    print("Automatically downloading official Python 3.12.8 installer from python.org...")
 
-    zip_path = config.RUNTIME_DIR / "python-3.12.8-embed-amd64.zip"
-    success = download_file_with_resume(OFFICIAL_PYTHON_ZIP_URL, zip_path, min_size=5 * 1024 * 1024)
+    installer_path = config.RUNTIME_DIR / "python-3.12.8-amd64.exe"
+    success = download_file_with_resume(OFFICIAL_PYTHON_INSTALLER_URL, installer_path, min_size=20 * 1024 * 1024)
     if not success:
-        print("ERROR: Failed to download official Python 3.12 package from python.org.")
+        print("ERROR: Failed to download official Python 3.12 installer package from python.org.")
         return None
 
-    print(f"Extracting official Python 3.12 runtime into {PYTHON_RUNTIME_DIR}...")
+    print(f"Installing official Python 3.12 runtime with Tkinter into {PYTHON_RUNTIME_DIR}...")
     try:
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(PYTHON_RUNTIME_DIR)
-
-        pth_file = list(PYTHON_RUNTIME_DIR.glob("*._pth"))
-        if pth_file:
-            pth_path = pth_file[0]
-            content = pth_path.read_text(encoding="utf-8")
-            if "#import site" in content:
-                content = content.replace("#import site", "import site")
-                pth_path.write_text(content, encoding="utf-8")
-
-        get_pip_path = config.RUNTIME_DIR / "get-pip.py"
-        download_file_with_resume(GET_PIP_URL, get_pip_path)
-        if get_pip_path.exists():
-            subprocess.run([str(target_python), str(get_pip_path), "--no-warn-script-location"], capture_output=True, timeout=60)
+        # Silent standalone per-user installation into runtime/python312
+        cmd = [
+            str(installer_path),
+            "/quiet",
+            "InstallAllUsers=0",
+            "Include_tcltk=1",
+            "Include_pip=1",
+            "Include_test=0",
+            f"TargetDir={PYTHON_RUNTIME_DIR}"
+        ]
+        res = subprocess.run(cmd, capture_output=True, timeout=120)
+        if res.returncode != 0:
+            print(f"Installer completed with status code {res.returncode}. Output: {res.stderr.decode(errors='ignore')}")
 
     except Exception as e:
         print(f"ERROR: Failed to set up bootstrapped Python runtime: {e}")
         return None
 
     if verify_python_executable(target_python):
-        print(f"Bootstrapped Python 3.12 successfully at {target_python}")
+        print(f"Bootstrapped Python 3.12 with Tkinter successfully at {target_python}")
         return str(target_python)
 
     return None
@@ -159,7 +157,7 @@ def find_supported_python_executable() -> str:
     if verify_python_executable(bootstrapped):
         return str(bootstrapped)
 
-    if check_python_version():
+    if check_python_version() and check_module_importable(sys.executable, "tkinter"):
         return sys.executable
 
     candidates = [
@@ -189,7 +187,7 @@ def ensure_venv() -> str:
         if verify_python_executable(venv_python):
             return str(venv_python)
         else:
-            print("Existing .venv uses an unsupported Python version. Removing .venv...")
+            print("Existing .venv uses an unsupported Python version or lacks Tkinter. Removing .venv...")
             import shutil
             try:
                 shutil.rmtree(venv_dir)
@@ -198,7 +196,7 @@ def ensure_venv() -> str:
 
     supported_exec = find_supported_python_executable()
     if not supported_exec:
-        print("ERROR: Could not locate or bootstrap a supported Python 3.10-3.12 interpreter.")
+        print("ERROR: Could not locate or bootstrap a supported Python 3.10-3.12 interpreter with Tkinter.")
         return None
 
     if str(PYTHON_RUNTIME_DIR) in str(supported_exec):
@@ -206,9 +204,9 @@ def ensure_venv() -> str:
 
     print(f"Creating local virtual environment in {venv_dir} using {supported_exec}...")
     if isinstance(supported_exec, str):
-        cmd = supported_exec.split() + ["-m", "venv", str(venv_dir)]
+        cmd = supported_exec.split() + ["-m", "venv", "--system-site-packages", str(venv_dir)]
     else:
-        cmd = [str(c) for c in supported_exec] + ["-m", "venv", str(venv_dir)]
+        cmd = [str(c) for c in supported_exec] + ["-m", "venv", "--system-site-packages", str(venv_dir)]
 
     try:
         subprocess.check_call(cmd)
@@ -241,6 +239,12 @@ def check_module_importable(target_python: str, module_name: str) -> bool:
 def check_dependencies(python_exec: str = None) -> bool:
     print("Checking Python dependencies...")
     target_python = python_exec or sys.executable
+
+    # Verify Tkinter first
+    if not check_module_importable(target_python, "tkinter"):
+        print("Tkinter is missing in the target Python environment.")
+        return False
+    print("Tkinter import successful - OK")
 
     missing = []
     if not check_module_importable(target_python, "llama_cpp"):
@@ -288,11 +292,11 @@ def verify_and_setup_environment() -> bool:
 
     target_python = sys.executable
 
-    if not check_python_version():
-        print(f"Current interpreter ({sys.version.split()[0]}) is unsupported.")
+    if not check_python_version() or not check_module_importable(target_python, "tkinter"):
+        print(f"Current interpreter ({sys.version.split()[0]}) is unsupported or lacks Tkinter.")
         target_python = ensure_venv()
         if not target_python or not verify_python_executable(target_python):
-            print("ERROR: Could not establish a supported Python 3.10-3.12 environment.")
+            print("ERROR: Could not establish a supported Python 3.10-3.12 environment with Tkinter.")
             return False
 
     if not check_dependencies(python_exec=target_python):
