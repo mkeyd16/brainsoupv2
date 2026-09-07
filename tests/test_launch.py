@@ -8,8 +8,9 @@ from unittest.mock import patch, MagicMock
 
 from launch import (
     download_file_with_resume,
-    check_python,
+    check_python_version,
     find_supported_python_executable,
+    bootstrap_official_python,
     ensure_venv,
     check_dependencies,
     verify_and_setup_environment
@@ -58,47 +59,48 @@ class TestLaunchBootstrap(unittest.TestCase):
 
     def test_python_version_check_supported(self):
         v312 = DummyVersionInfo(3, 12, 0)
-        self.assertTrue(check_python(v312))
+        self.assertTrue(check_python_version(v312))
 
         v311 = DummyVersionInfo(3, 11, 4)
-        self.assertTrue(check_python(v311))
+        self.assertTrue(check_python_version(v311))
 
         v310 = DummyVersionInfo(3, 10, 5)
-        self.assertTrue(check_python(v310))
+        self.assertTrue(check_python_version(v310))
 
     def test_python_version_check_unsupported(self):
         v314 = DummyVersionInfo(3, 14, 6)
-        self.assertFalse(check_python(v314))
+        self.assertFalse(check_python_version(v314))
 
         v313 = DummyVersionInfo(3, 13, 0)
-        self.assertFalse(check_python(v313))
+        self.assertFalse(check_python_version(v313))
 
         v39 = DummyVersionInfo(3, 9, 2)
-        self.assertFalse(check_python(v39))
+        self.assertFalse(check_python_version(v39))
 
-    @patch("subprocess.run")
-    def test_find_supported_python_executable_prefers_py_launcher(self, mock_run):
-        # Simulate py -3.12 returning returncode 0
-        mock_proc = MagicMock()
-        mock_proc.returncode = 0
-        mock_run.return_value = mock_proc
+    @patch("launch.verify_python_executable")
+    def test_find_supported_python_executable_prefers_py_launcher(self, mock_verify):
+        # mock_verify returns False for bootstrapped dir, True for py -3.12
+        mock_verify.side_effect = lambda cmd: "py -3.12" in str(cmd) or cmd == ["py", "-3.12"]
 
         v314 = DummyVersionInfo(3, 14, 6)
         with patch("sys.version_info", v314):
             exec_found = find_supported_python_executable()
             self.assertEqual(exec_found, "py -3.12")
 
+    @patch("launch.PYTHON_RUNTIME_DIR", new_callable=lambda: Path("/nonexistent_runtime_dir"))
+    @patch("launch.bootstrap_official_python")
     @patch("subprocess.run")
-    def test_find_supported_python_executable_rejects_python_314(self, mock_run):
-        # Simulate all candidate executables returning returncode 1 (unsupported version)
+    def test_find_supported_python_executable_triggers_bootstrap_if_none_installed(self, mock_run, mock_bootstrap, mock_runtime_dir):
         mock_proc = MagicMock()
         mock_proc.returncode = 1
         mock_run.return_value = mock_proc
+        mock_bootstrap.return_value = "/app/runtime/python312/python.exe"
 
         v314 = DummyVersionInfo(3, 14, 6)
         with patch("sys.version_info", v314):
             exec_found = find_supported_python_executable()
-            self.assertIsNone(exec_found)
+            self.assertEqual(exec_found, "/app/runtime/python312/python.exe")
+            mock_bootstrap.assert_called_once()
 
     @patch("subprocess.check_call")
     def test_check_dependencies_already_present(self, mock_check_call):

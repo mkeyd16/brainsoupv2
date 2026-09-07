@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import urllib.request
+import zipfile
 import time
 import importlib
 from pathlib import Path
@@ -10,145 +11,39 @@ import config
 SUPPORTED_PYTHON_MIN = (3, 10)
 SUPPORTED_PYTHON_MAX = (3, 13)
 
-def check_python(sys_version_info=None) -> bool:
-    version_info = sys_version_info or sys.version_info
-    ver_str = f"{version_info.major}.{version_info.minor}.{version_info.micro}"
+OFFICIAL_PYTHON_ZIP_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
+GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
 
-    if version_info < SUPPORTED_PYTHON_MIN or version_info >= SUPPORTED_PYTHON_MAX:
-        print("==================================================")
-        print(f"ERROR: Unsupported Python version detected: {ver_str}")
-        print("wrld.v2 requires Python 3.10, 3.11, or 3.12 for prebuilt llama-cpp-python wheels.")
-        print(f"Python {ver_str} lacks prebuilt binary wheels for llama-cpp-python, requiring C++/CMake build toolchains (NMake/MSVC).")
-        print("Please install Python 3.10, 3.11, or 3.12 to enable 1-click startup without C++ compilers.")
-        print("==================================================")
+def check_python_version(sys_version_info=None) -> bool:
+    version_info = sys_version_info or sys.version_info
+    return SUPPORTED_PYTHON_MIN <= (version_info.major, version_info.minor) < SUPPORTED_PYTHON_MAX
+
+def verify_python_executable(exec_cmd) -> bool:
+    try:
+        if isinstance(exec_cmd, (str, Path)):
+            cmd = [str(exec_cmd)]
+        else:
+            cmd = [str(c) for c in exec_cmd]
+        res = subprocess.run(
+            cmd + ["-c", "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return res.returncode == 0
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
         return False
 
-    print(f"Python version: {ver_str} - OK")
-    return True
-
-def find_supported_python_executable() -> str:
-    """
-    Scans for an installed supported Python interpreter (3.10, 3.11, or 3.12).
-    Returns path or command string, or None if not found.
-    """
-    if check_python():
-        return sys.executable
-
-    candidates = [
-        ["py", "-3.12"],
-        ["py", "-3.11"],
-        ["py", "-3.10"],
-        ["python3.12"],
-        ["python3.11"],
-        ["python3.10"],
-        ["python"]
-    ]
-
-    for cmd in candidates:
-        try:
-            res = subprocess.run(
-                cmd + ["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}'); sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if res.returncode == 0:
-                return " ".join(cmd) if isinstance(cmd, list) else cmd
-        except (subprocess.SubprocessError, FileNotFoundError):
-            continue
-
-    return None
-
-def ensure_venv() -> str:
-    """
-    Ensures a project-local .venv directory exists and is created using a supported Python interpreter.
-    Returns path to python executable inside .venv.
-    """
-    venv_dir = config.BASE_DIR / ".venv"
-    if sys.platform == "win32":
-        venv_python = venv_dir / "Scripts" / "python.exe"
-    else:
-        venv_python = venv_dir / "bin" / "python"
-
-    if venv_python.exists():
-        try:
-            res = subprocess.run(
-                [str(venv_python), "-c", "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
-                capture_output=True,
-                timeout=5
-            )
-            if res.returncode == 0:
-                return str(venv_python)
-        except Exception:
-            pass
-
-    # .venv missing or invalid - find supported Python to build .venv
-    supported_exec = find_supported_python_executable()
-    if not supported_exec:
-        return None
-
-    print(f"Creating local virtual environment in {venv_dir}...")
-    cmd = supported_exec.split() + ["-m", "venv", str(venv_dir)]
-    subprocess.check_call(cmd)
-    return str(venv_python)
-
-def check_dependencies(python_exec: str = None) -> bool:
-    print("Checking Python dependencies...")
-    target_python = python_exec or sys.executable
-
-    missing = []
-    try:
-        importlib.import_module("llama_cpp")
-    except ImportError:
-        missing.append("llama-cpp-python")
-
-    try:
-        importlib.import_module("requests")
-    except ImportError:
-        missing.append("requests")
-
-    if missing:
-        print(f"Missing packages detected: {missing}")
-        print("Installing required packages from requirements.txt...")
-        cmd = [target_python, "-m", "pip", "install", "-r", str(config.BASE_DIR / "requirements.txt")]
-        try:
-            subprocess.check_call(cmd)
-            print("Pip install command executed successfully.")
-        except subprocess.CalledProcessError as e:
-            print("==================================================")
-            print(f"ERROR: Failed to install required Python dependencies (exit code {e.returncode}).")
-            print("Ensure you are running a supported Python version (3.10-3.12) with internet access.")
-            print("==================================================")
-            return False
-
-        try:
-            importlib.import_module("llama_cpp")
-            print("Post-install verification: llama_cpp imported successfully - OK")
-        except ImportError:
-            print("==================================================")
-            print("ERROR: Post-install import verification failed for 'llama_cpp'.")
-            print("Package installation appeared to complete, but llama_cpp is not importable.")
-            print("==================================================")
-            return False
-    else:
-        print("Dependencies: OK")
-
-    return True
-
-def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
+def download_file_with_resume(url: str, dest_path: Path, min_size: int = 0) -> bool:
     dest_path = Path(dest_path)
     part_path = dest_path.with_suffix(".part")
 
     if dest_path.exists():
-        if dest_path.stat().st_size >= min_size:
-            print(f"File found: {dest_path.name} ({dest_path.stat().st_size / (1024*1024):.1f} MB) - OK")
+        if min_size == 0 or dest_path.stat().st_size >= min_size:
             return True
         else:
-            print(f"Existing file {dest_path.name} is corrupted/too small ({dest_path.stat().st_size} bytes). Removing.")
             dest_path.unlink()
-
-    print(f"Downloading model from {url}...")
-    print(f"Saving temporary file to: {part_path.name}")
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -157,12 +52,10 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
     downloaded_bytes = 0
     if part_path.exists():
         downloaded_bytes = part_path.stat().st_size
-        if downloaded_bytes >= min_size:
+        if min_size > 0 and downloaded_bytes >= min_size:
             part_path.rename(dest_path)
-            print(f"Part file was complete. Promoted to {dest_path.name}")
             return True
         headers["Range"] = f"bytes={downloaded_bytes}-"
-        print(f"Resuming download from byte {downloaded_bytes}...")
 
     mode = "ab" if "Range" in headers else "wb"
 
@@ -172,7 +65,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
             status_code = getattr(response, "status", 200)
 
             if "Range" in headers and status_code == 200:
-                print("Server does not support range requests. Restarting download...")
                 downloaded_bytes = 0
                 mode = "wb"
 
@@ -183,8 +75,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
             block_size = 1024 * 1024
             last_report_bytes = downloaded_bytes
             last_report_time = time.time()
-
-            print(f"Download started. Total size: {f'{total_size / (1024*1024):.1f} MB' if total_size else 'Unknown'}")
 
             with open(part_path, mode) as f:
                 while True:
@@ -204,33 +94,196 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int) -> bool:
                         last_report_bytes = downloaded_bytes
                         last_report_time = now
 
-            print(f"Download finished: {downloaded_bytes / (1024*1024):.1f} MB received.")
-
     except Exception as e:
-        print(f"Download error encountered: {e}")
+        print(f"Download error encountered for {url}: {e}")
 
     if part_path.exists():
         actual_size = part_path.stat().st_size
-        if actual_size >= min_size:
+        if min_size == 0 or actual_size >= min_size:
             part_path.rename(dest_path)
-            print(f"Verification successful. Saved to {dest_path.name}")
             return True
         else:
-            print(f"Error: Downloaded file size ({actual_size} bytes) is less than expected minimum ({min_size} bytes).")
+            return False
+    return False
+
+def bootstrap_official_python() -> str:
+    PYTHON_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    target_python = PYTHON_RUNTIME_DIR / ("python.exe" if sys.platform == "win32" else "python")
+
+    if verify_python_executable(target_python):
+        return str(target_python)
+
+    print("No supported Python (3.10-3.12) found on host system.")
+    print("Automatically downloading official Python 3.12.8 runtime from python.org...")
+
+    zip_path = config.RUNTIME_DIR / "python-3.12.8-embed-amd64.zip"
+    success = download_file_with_resume(OFFICIAL_PYTHON_ZIP_URL, zip_path, min_size=5 * 1024 * 1024)
+    if not success:
+        print("ERROR: Failed to download official Python 3.12 package from python.org.")
+        return None
+
+    print(f"Extracting official Python 3.12 runtime into {PYTHON_RUNTIME_DIR}...")
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(PYTHON_RUNTIME_DIR)
+
+        pth_file = list(PYTHON_RUNTIME_DIR.glob("*._pth"))
+        if pth_file:
+            pth_path = pth_file[0]
+            content = pth_path.read_text(encoding="utf-8")
+            if "#import site" in content:
+                content = content.replace("#import site", "import site")
+                pth_path.write_text(content, encoding="utf-8")
+
+        get_pip_path = config.RUNTIME_DIR / "get-pip.py"
+        download_file_with_resume(GET_PIP_URL, get_pip_path)
+        if get_pip_path.exists():
+            subprocess.run([str(target_python), str(get_pip_path), "--no-warn-script-location"], capture_output=True, timeout=60)
+
+    except Exception as e:
+        print(f"ERROR: Failed to set up bootstrapped Python runtime: {e}")
+        return None
+
+    if verify_python_executable(target_python):
+        print(f"Bootstrapped Python 3.12 successfully at {target_python}")
+        return str(target_python)
+
+    return None
+
+def find_supported_python_executable() -> str:
+    bootstrapped = PYTHON_RUNTIME_DIR / ("python.exe" if sys.platform == "win32" else "python")
+    if verify_python_executable(bootstrapped):
+        return str(bootstrapped)
+
+    if check_python_version():
+        return sys.executable
+
+    candidates = [
+        ["py", "-3.12"],
+        ["py", "-3.11"],
+        ["py", "-3.10"],
+        ["python3.12"],
+        ["python3.11"],
+        ["python3.10"],
+        ["python"]
+    ]
+
+    for cmd in candidates:
+        if verify_python_executable(cmd):
+            return " ".join(cmd) if isinstance(cmd, list) else cmd
+
+    return bootstrap_official_python()
+
+def ensure_venv() -> str:
+    venv_dir = config.BASE_DIR / ".venv"
+    if sys.platform == "win32":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+
+    if venv_python.exists():
+        if verify_python_executable(venv_python):
+            return str(venv_python)
+        else:
+            print("Existing .venv uses an unsupported Python version. Removing .venv...")
+            import shutil
+            try:
+                shutil.rmtree(venv_dir)
+            except Exception as e:
+                print(f"Warning: Failed to delete invalid .venv: {e}")
+
+    supported_exec = find_supported_python_executable()
+    if not supported_exec:
+        print("ERROR: Could not locate or bootstrap a supported Python 3.10-3.12 interpreter.")
+        return None
+
+    print(f"Creating local virtual environment in {venv_dir} using {supported_exec}...")
+    if isinstance(supported_exec, str):
+        cmd = supported_exec.split() + ["-m", "venv", str(venv_dir)]
+    else:
+        cmd = [str(c) for c in supported_exec] + ["-m", "venv", str(venv_dir)]
+
+    try:
+        subprocess.check_call(cmd)
+    except Exception:
+        venv_dir.mkdir(parents=True, exist_ok=True)
+
+    if verify_python_executable(venv_python):
+        return str(venv_python)
+
+    return supported_exec
+
+def check_module_importable(target_python: str, module_name: str) -> bool:
+    if target_python == sys.executable:
+        try:
+            importlib.import_module(module_name)
+            return True
+        except ImportError:
+            return False
+
+    try:
+        res = subprocess.run(
+            [target_python, "-c", f"import {module_name}"],
+            capture_output=True,
+            timeout=5
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+def check_dependencies(python_exec: str = None) -> bool:
+    print("Checking Python dependencies...")
+    target_python = python_exec or sys.executable
+
+    missing = []
+    if not check_module_importable(target_python, "llama_cpp"):
+        missing.append("llama-cpp-python")
+
+    if not check_module_importable(target_python, "requests"):
+        missing.append("requests")
+
+    if missing:
+        print(f"Missing packages detected: {missing}")
+        print("Installing required packages from requirements.txt...")
+        cmd = [target_python, "-m", "pip", "install", "--prefer-binary", "-r", str(config.BASE_DIR / "requirements.txt")]
+        try:
+            subprocess.check_call(cmd)
+            print("Pip install command executed successfully.")
+        except subprocess.CalledProcessError as e:
+            print("==================================================")
+            print(f"ERROR: Failed to install required Python dependencies (exit code {e.returncode}).")
+            print("Ensure you are running a supported Python version (3.10-3.12) with internet access.")
+            print("==================================================")
+            return False
+
+        if check_module_importable(target_python, "llama_cpp"):
+            print("Post-install verification: llama_cpp imported successfully - OK")
+        else:
+            print("==================================================")
+            print("ERROR: Post-install import verification failed for 'llama_cpp'.")
+            print("Package installation appeared to complete, but llama_cpp is not importable.")
+            print("==================================================")
             return False
     else:
-        print("Error: Temporary file .part does not exist after download attempt.")
-        return False
+        print("Dependencies: OK")
+
+    return True
 
 def verify_and_setup_environment() -> bool:
     print("==================================================")
     print("Checking wrld.v2 installation...")
     print("==================================================")
 
-    if not check_python():
-        return False
+    target_python = sys.executable
 
-    if not check_dependencies():
+    if not check_python_version():
+        print(f"Current interpreter ({sys.version.split()[0]}) is unsupported.")
+        target_python = ensure_venv()
+        if not target_python or not verify_python_executable(target_python):
+            print("ERROR: Could not establish a supported Python 3.10-3.12 environment.")
+            return False
+
+    if not check_dependencies(python_exec=target_python):
         return False
 
     model_success = download_file_with_resume(
