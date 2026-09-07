@@ -53,9 +53,6 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int = 0) -> b
     downloaded_bytes = 0
     if part_path.exists():
         downloaded_bytes = part_path.stat().st_size
-        if min_size > 0 and downloaded_bytes >= min_size:
-            part_path.rename(dest_path)
-            return True
         headers["Range"] = f"bytes={downloaded_bytes}-"
 
     mode = "ab" if "Range" in headers else "wb"
@@ -198,7 +195,6 @@ def ensure_venv() -> str:
         print("ERROR: Could not locate or bootstrap a supported Python 3.10-3.12 interpreter.")
         return None
 
-    # If supported_exec is the embedded runtime, use it directly as the isolated environment
     if str(PYTHON_RUNTIME_DIR) in str(supported_exec):
         return supported_exec
 
@@ -251,12 +247,10 @@ def check_dependencies(python_exec: str = None) -> bool:
         print(f"Missing packages detected: {missing}")
         print("Installing required packages from requirements.txt...")
 
-        # Force wheel-only installation (--only-binary=:all:) to prevent .tar.gz C++ compilation
-        cmd = [target_python, "-m", "pip", "install", "--prefer-binary", "--only-binary=:all:", "-r", str(config.BASE_DIR / "requirements.txt")]
+        cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", "--only-binary=:all:", "-r", str(config.BASE_DIR / "requirements.txt")]
 
-        # For Windows x64 platforms, if pypi wheel is not found directly, pass official release wheel URL
         if sys.platform == "win32" and "llama-cpp-python" in missing:
-            cmd = [target_python, "-m", "pip", "install", "--prefer-binary", PREBUILT_LLAMA_CPP_WHEEL_URL, "-r", str(config.BASE_DIR / "requirements.txt")]
+            cmd = [target_python, "-m", "pip", "install", "--no-warn-script-location", "--prefer-binary", PREBUILT_LLAMA_CPP_WHEEL_URL, "-r", str(config.BASE_DIR / "requirements.txt")]
 
         try:
             subprocess.check_call(cmd)
