@@ -1,4 +1,13 @@
 import sys
+import os
+from pathlib import Path
+
+# Ensure project root directory is on sys.path and set as current working directory
+PROJECT_ROOT = Path(__file__).parent.resolve()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
 import time
 import logging
 import threading

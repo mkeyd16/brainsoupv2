@@ -1,11 +1,18 @@
-import os
 import sys
+import os
+from pathlib import Path
+
+# Ensure project root is in sys.path before importing local modules
+PROJECT_ROOT = Path(__file__).parent.resolve()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
 import subprocess
 import urllib.request
 import zipfile
 import time
 import importlib
-from pathlib import Path
 import config
 
 SUPPORTED_PYTHON_MIN = (3, 10)
