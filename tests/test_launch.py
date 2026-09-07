@@ -9,6 +9,8 @@ from unittest.mock import patch, MagicMock
 from launch import (
     download_file_with_resume,
     check_python,
+    find_supported_python_executable,
+    ensure_venv,
     check_dependencies,
     verify_and_setup_environment
 )
@@ -68,6 +70,12 @@ class TestLaunchBootstrap(unittest.TestCase):
         v39 = DummyVersionInfo(3, 9, 2)
         self.assertFalse(check_python(v39))
 
+    @patch("subprocess.run")
+    def test_find_supported_python_executable_discovery(self, mock_run):
+        # Current interpreter is supported
+        exec_found = find_supported_python_executable()
+        self.assertIsNotNone(exec_found)
+
     @patch("subprocess.check_call")
     def test_check_dependencies_already_present(self, mock_check_call):
         with patch.dict("sys.modules", {"llama_cpp": MagicMock(), "requests": MagicMock()}):
@@ -80,7 +88,6 @@ class TestLaunchBootstrap(unittest.TestCase):
         mock_check_call.return_value = 0
         fake_llama_cpp = MagicMock()
 
-        # import_module called once initially (fails) and once after pip install (succeeds)
         def mock_import(name):
             if name == "llama_cpp":
                 if mock_import.call_count == 0:

@@ -26,8 +26,76 @@ def check_python(sys_version_info=None) -> bool:
     print(f"Python version: {ver_str} - OK")
     return True
 
-def check_dependencies() -> bool:
+def find_supported_python_executable() -> str:
+    """
+    Scans for an installed supported Python interpreter (3.10, 3.11, or 3.12).
+    Returns path or command string, or None if not found.
+    """
+    if check_python():
+        return sys.executable
+
+    candidates = [
+        ["py", "-3.12"],
+        ["py", "-3.11"],
+        ["py", "-3.10"],
+        ["python3.12"],
+        ["python3.11"],
+        ["python3.10"],
+        ["python"]
+    ]
+
+    for cmd in candidates:
+        try:
+            res = subprocess.run(
+                cmd + ["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}'); sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if res.returncode == 0:
+                return " ".join(cmd) if isinstance(cmd, list) else cmd
+        except (subprocess.SubprocessError, FileNotFoundError):
+            continue
+
+    return None
+
+def ensure_venv() -> str:
+    """
+    Ensures a project-local .venv directory exists and is created using a supported Python interpreter.
+    Returns path to python executable inside .venv.
+    """
+    venv_dir = config.BASE_DIR / ".venv"
+    if sys.platform == "win32":
+        venv_python = venv_dir / "Scripts" / "python.exe"
+    else:
+        venv_python = venv_dir / "bin" / "python"
+
+    if venv_python.exists():
+        try:
+            res = subprocess.run(
+                [str(venv_python), "-c", "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)"],
+                capture_output=True,
+                timeout=5
+            )
+            if res.returncode == 0:
+                return str(venv_python)
+        except Exception:
+            pass
+
+    # .venv missing or invalid - find supported Python to build .venv
+    supported_exec = find_supported_python_executable()
+    if not supported_exec:
+        return None
+
+    print(f"Creating local virtual environment in {venv_dir}...")
+    cmd = supported_exec.split() + ["-m", "venv", str(venv_dir)]
+    subprocess.check_call(cmd)
+    return str(venv_python)
+
+def check_dependencies(python_exec: str = None) -> bool:
     print("Checking Python dependencies...")
+    target_python = python_exec or sys.executable
+
     missing = []
     try:
         importlib.import_module("llama_cpp")
@@ -42,7 +110,7 @@ def check_dependencies() -> bool:
     if missing:
         print(f"Missing packages detected: {missing}")
         print("Installing required packages from requirements.txt...")
-        cmd = [sys.executable, "-m", "pip", "install", "-r", str(config.BASE_DIR / "requirements.txt")]
+        cmd = [target_python, "-m", "pip", "install", "-r", str(config.BASE_DIR / "requirements.txt")]
         try:
             subprocess.check_call(cmd)
             print("Pip install command executed successfully.")
