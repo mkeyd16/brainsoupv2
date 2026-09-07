@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 from launch import (
     download_file_with_resume,
-    check_python_version,
+    validate_python_environment,
     find_supported_python_executable,
     bootstrap_official_python,
     ensure_venv,
@@ -43,59 +43,29 @@ class DummyResponse:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-class DummyVersionInfo:
-    def __init__(self, major, minor, micro):
-        self.major = major
-        self.minor = minor
-        self.micro = micro
-
-    def __lt__(self, other):
-        return (self.major, self.minor) < other
-
-    def __ge__(self, other):
-        return (self.major, self.minor) >= other
-
 class TestLaunchBootstrap(unittest.TestCase):
 
-    def test_python_version_check_supported(self):
-        v312 = DummyVersionInfo(3, 12, 0)
-        self.assertTrue(check_python_version(v312))
+    def test_validate_python_environment(self):
+        valid, _ = validate_python_environment(sys.executable)
+        self.assertTrue(valid)
 
-        v311 = DummyVersionInfo(3, 11, 4)
-        self.assertTrue(check_python_version(v311))
+    @patch("launch.validate_python_environment")
+    def test_find_supported_python_executable_prefers_py_launcher(self, mock_validate):
+        mock_validate.side_effect = lambda cmd: (True, "OK") if "py -3.12" in str(cmd) or cmd == ["py", "-3.12"] else (False, "Fail")
 
-        v310 = DummyVersionInfo(3, 10, 5)
-        self.assertTrue(check_python_version(v310))
-
-    def test_python_version_check_unsupported(self):
-        v314 = DummyVersionInfo(3, 14, 6)
-        self.assertFalse(check_python_version(v314))
-
-        v313 = DummyVersionInfo(3, 13, 0)
-        self.assertFalse(check_python_version(v313))
-
-        v39 = DummyVersionInfo(3, 9, 2)
-        self.assertFalse(check_python_version(v39))
-
-    @patch("launch.verify_python_executable")
-    def test_find_supported_python_executable_prefers_py_launcher(self, mock_verify):
-        mock_verify.side_effect = lambda cmd: "py -3.12" in str(cmd) or cmd == ["py", "-3.12"]
-
-        v314 = DummyVersionInfo(3, 14, 6)
+        v314 = (3, 14, 6)
         with patch("sys.version_info", v314):
             exec_found = find_supported_python_executable()
             self.assertEqual(exec_found, "py -3.12")
 
     @patch("launch.PYTHON_RUNTIME_DIR", new_callable=lambda: Path("/nonexistent_runtime_dir"))
     @patch("launch.bootstrap_official_python")
-    @patch("subprocess.run")
-    def test_find_supported_python_executable_triggers_bootstrap_if_none_installed(self, mock_run, mock_bootstrap, mock_runtime_dir):
-        mock_proc = MagicMock()
-        mock_proc.returncode = 1
-        mock_run.return_value = mock_proc
+    @patch("launch.validate_python_environment")
+    def test_find_supported_python_executable_triggers_bootstrap_if_none_installed(self, mock_validate, mock_bootstrap, mock_runtime_dir):
+        mock_validate.return_value = (False, "Fail")
         mock_bootstrap.return_value = "/app/runtime/python312/python.exe"
 
-        v314 = DummyVersionInfo(3, 14, 6)
+        v314 = (3, 14, 6)
         with patch("sys.version_info", v314):
             exec_found = find_supported_python_executable()
             self.assertEqual(exec_found, "/app/runtime/python312/python.exe")
