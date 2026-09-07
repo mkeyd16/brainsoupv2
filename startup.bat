@@ -53,10 +53,15 @@ if defined FOUND_PYTHON goto CREATE_VENV
 
 :: If no supported Python is found
 echo ==================================================
-echo ERROR: No supported Python version (3.10, 3.11, or 3.12) was found on your system.
-echo wrld.v2 requires Python 3.10, 3.11, or 3.12 to use prebuilt llama-cpp-python wheels.
+echo ERROR: No supported Python installation was found.
 echo.
-echo Python 3.13+ lacks prebuilt llama-cpp-python binary wheels, requiring C++/CMake build toolchains.
+echo wrld.v2 requires Python 3.10, 3.11, or 3.12
+echo for the current prebuilt llama-cpp-python installation.
+echo.
+echo Detected Python versions are unsupported (e.g. Python 3.13+ or 3.9-).
+echo Python 3.13+ lacks prebuilt binary wheels for llama-cpp-python.
+echo.
+echo No C++/CMake build toolchain will be installed automatically.
 echo Please install Python 3.10, 3.11, or 3.12 from https://www.python.org/downloads/
 echo and ensure "Add Python to PATH" is checked during installation.
 echo ==================================================
@@ -65,27 +70,26 @@ exit /b 1
 
 :TRY_PY_LAUNCHER
 py -%1 -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
-if %ERRORLEVEL% EQU 0 (
+if !ERRORLEVEL! EQU 0 (
     set "FOUND_PYTHON=py -%1"
 )
 exit /b 0
 
 :TRY_EXEC
 where %1 >nul 2>nul
-if %ERRORLEVEL% EQU 0 (
-    %1 -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
-    if %ERRORLEVEL% EQU 0 (
-        set "FOUND_PYTHON=%1"
-    )
+if !ERRORLEVEL! NEQ 0 exit /b 0
+%1 -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
+if !ERRORLEVEL! EQU 0 (
+    set "FOUND_PYTHON=%1"
 )
 exit /b 0
 
 :CREATE_VENV
-echo Found supported Python interpreter: %FOUND_PYTHON%
+echo Found supported Python interpreter: !FOUND_PYTHON!
 echo Creating local virtual environment in "%PROJECT_DIR%.venv"...
 
-%FOUND_PYTHON% -m venv "%PROJECT_DIR%.venv"
-if %ERRORLEVEL% NEQ 0 (
+!FOUND_PYTHON! -m venv "%PROJECT_DIR%.venv"
+if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Failed to create virtual environment in "%PROJECT_DIR%.venv".
     pause
     exit /b 1
@@ -93,11 +97,22 @@ if %ERRORLEVEL% NEQ 0 (
 
 set "VENV_PYTHON=%PROJECT_DIR%.venv\Scripts\python.exe"
 
+:: Verify newly created .venv Python version
+"%VENV_PYTHON%" -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
+if !ERRORLEVEL! NEQ 0 (
+    echo ==================================================
+    echo ERROR: The created .venv uses an unsupported Python version.
+    echo wrld.v2 requires Python 3.10, 3.11, or 3.12.
+    echo ==================================================
+    pause
+    exit /b 1
+)
+
 :RUN_SIMULATION
 
 :: Run launch.py to verify dependencies and model file
 "%VENV_PYTHON%" launch.py
-if %ERRORLEVEL% NEQ 0 (
+if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Environment verification failed.
     pause
     exit /b 1
@@ -105,7 +120,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: Run main simulation application
 "%VENV_PYTHON%" main.py
-if %ERRORLEVEL% NEQ 0 (
+if !ERRORLEVEL! NEQ 0 (
     echo ERROR: wrld.v2 exited with an error.
     pause
     exit /b 1

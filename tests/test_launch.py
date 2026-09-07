@@ -60,6 +60,9 @@ class TestLaunchBootstrap(unittest.TestCase):
         v312 = DummyVersionInfo(3, 12, 0)
         self.assertTrue(check_python(v312))
 
+        v311 = DummyVersionInfo(3, 11, 4)
+        self.assertTrue(check_python(v311))
+
         v310 = DummyVersionInfo(3, 10, 5)
         self.assertTrue(check_python(v310))
 
@@ -67,14 +70,35 @@ class TestLaunchBootstrap(unittest.TestCase):
         v314 = DummyVersionInfo(3, 14, 6)
         self.assertFalse(check_python(v314))
 
+        v313 = DummyVersionInfo(3, 13, 0)
+        self.assertFalse(check_python(v313))
+
         v39 = DummyVersionInfo(3, 9, 2)
         self.assertFalse(check_python(v39))
 
     @patch("subprocess.run")
-    def test_find_supported_python_executable_discovery(self, mock_run):
-        # Current interpreter is supported
-        exec_found = find_supported_python_executable()
-        self.assertIsNotNone(exec_found)
+    def test_find_supported_python_executable_prefers_py_launcher(self, mock_run):
+        # Simulate py -3.12 returning returncode 0
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_run.return_value = mock_proc
+
+        v314 = DummyVersionInfo(3, 14, 6)
+        with patch("sys.version_info", v314):
+            exec_found = find_supported_python_executable()
+            self.assertEqual(exec_found, "py -3.12")
+
+    @patch("subprocess.run")
+    def test_find_supported_python_executable_rejects_python_314(self, mock_run):
+        # Simulate all candidate executables returning returncode 1 (unsupported version)
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_run.return_value = mock_proc
+
+        v314 = DummyVersionInfo(3, 14, 6)
+        with patch("sys.version_info", v314):
+            exec_found = find_supported_python_executable()
+            self.assertIsNone(exec_found)
 
     @patch("subprocess.check_call")
     def test_check_dependencies_already_present(self, mock_check_call):
