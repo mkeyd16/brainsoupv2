@@ -26,11 +26,13 @@ class TestAI(unittest.TestCase):
             interests=["baking", "crafting"],
             dislikes=["rain"],
             mood="happy",
+            temperament="Sanguine",
+            existential_state="Reflective",
             memories=["Met Sarah yesterday."],
             relationships_summary="Sarah: Friend"
         )
         self.assertIn("Alex", prompt)
-        self.assertIn("STRICT RULE", prompt)
+        self.assertIn("REALITY & IDENTITY RULES", prompt)
         self.assertIn("Met Sarah yesterday.", prompt)
 
 if __name__ == "__main__":

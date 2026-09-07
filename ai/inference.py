@@ -18,6 +18,8 @@ class InferenceEngine:
         interests: list[str],
         dislikes: list[str],
         mood: str,
+        temperament: str,
+        existential_state: str,
         memories: list[str],
         relationships_summary: str,
         recent_chat_history: list[dict],
@@ -30,6 +32,8 @@ class InferenceEngine:
             interests=interests,
             dislikes=dislikes,
             mood=mood,
+            temperament=temperament,
+            existential_state=existential_state,
             memories=memories,
             relationships_summary=relationships_summary
         )

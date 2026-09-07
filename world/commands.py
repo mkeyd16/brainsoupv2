@@ -1,23 +1,37 @@
+import random
 import logging
+import config
 from world.world import World
 from world.npc import NPC
 from storage.save_manager import SaveManager
 
 logger = logging.getLogger("wrld.world.commands")
 
+RANDOM_NAMES = ["Karl", "Alex", "Clara", "David", "Elena", "Felix", "Gwen", "Hugo", "Iris", "Jesper", "Kira", "Leo", "Maya", "Nico", "Orla"]
+
 class CommandHandler:
     def __init__(self, world: World):
         self.world = world
+        self.pending_wipe = False
 
     def execute_command(self, raw_command: str) -> str:
+        if self.pending_wipe:
+            confirm_input = raw_command.strip().upper()
+            if confirm_input in ["YES", "Y"]:
+                self.pending_wipe = False
+                return self._perform_wipe()
+            else:
+                self.pending_wipe = False
+                return "Wipe canceled."
+
         if not raw_command.startswith("/"):
             return "Commands must start with '/'"
 
         parts = raw_command.strip().split(maxsplit=2)
         cmd = parts[0].lower()
 
-        if cmd == "/help":
-            return self._help()
+        if cmd in ["/help", "/cmds"]:
+            return self._help_and_cmds()
         elif cmd == "/save":
             filename = parts[1] if len(parts) > 1 else None
             return self._save(filename)
@@ -30,6 +44,9 @@ class CommandHandler:
         elif cmd == "/resume":
             self.world.scheduler.resume()
             return "Simulation resumed."
+        elif cmd == "/wipe":
+            self.pending_wipe = True
+            return "WARNING: /wipe will erase all current NPCs, memories, relationships, and save data.\nType 'YES' to confirm wipe or any other input to cancel."
         elif cmd == "/whisper":
             if len(parts) < 3:
                 return "Usage: /whisper NPC_NAME MESSAGE"
@@ -40,39 +57,27 @@ class CommandHandler:
                 return f"[Whisper sent to {target_npc}]: {message}"
             else:
                 return f"NPC '{target_npc}' not found."
-        elif cmd == "/npcs":
-            return self._list_npcs()
-        elif cmd == "/inspect":
-            if len(parts) < 2:
-                return "Usage: /inspect NPC_NAME"
-            return self._inspect_npc(parts[1])
         elif cmd == "/create":
-            if len(parts) < 2:
-                return "Usage: /create NAME | PERSONALITY | BACKGROUND"
-            args_str = raw_command[len("/create"):].strip()
-            return self._create_npc(args_str)
+            name_arg = parts[1] if len(parts) > 1 else None
+            return self._create_npc(name_arg)
         elif cmd == "/remove":
             if len(parts) < 2:
                 return "Usage: /remove NPC_NAME"
             return self._remove_npc(parts[1])
         else:
-            return f"Unknown command '{cmd}'. Type /help for available commands."
+            return f"Unknown command '{cmd}'. Type /help or /cmds for available commands."
 
-    def _help(self) -> str:
+    def _help_and_cmds(self) -> str:
         return """Available Commands:
 /help                     - Show this help menu
+/cmds                     - Show this help menu (alias for /help)
+/create [NAME]            - Create a new NPC (optional name, e.g. /create or /create Karl)
+/remove NPC_NAME          - Remove an NPC from the simulation
 /save [filename]          - Save current world state
-/load [filename]          - Load saved world state
-/pause                    - Pause autonomous NPC activity
-/resume                   - Resume autonomous NPC activity
-/whisper NPC_NAME MESSAGE - Send a private message to an NPC
-/npcs                     - List all NPCs in the world
-/inspect NPC_NAME         - Inspect an NPC's details, memories, and relationships
-/create NAME|PERS|BG      - Create a new NPC (e.g., /create Bob | Friendly | Carpenter)
-/remove NPC_NAME          - Remove an NPC from the world"""
+/wipe                     - Clear all persistent simulation data (requires confirmation)
+/whisper NPC_NAME MESSAGE - Send a private whisper to an NPC"""
 
     def _save(self, filename: str = None) -> str:
-        from pathlib import Path
         import config
         save_file = config.SAVE_DIR / filename if filename else config.DEFAULT_SAVE_FILE
         if SaveManager.save_world(self.world, save_file):
@@ -80,55 +85,55 @@ class CommandHandler:
         return "Failed to save world state."
 
     def _load(self, filename: str = None) -> str:
-        from pathlib import Path
         import config
         save_file = config.SAVE_DIR / filename if filename else config.DEFAULT_SAVE_FILE
         if SaveManager.load_world(self.world, save_file):
             return f"World loaded successfully from {save_file.name}."
         return f"Failed to load world state from {save_file.name}."
 
-    def _list_npcs(self) -> str:
-        if not self.world.npcs:
-            return "No NPCs currently exist in the world."
-        lines = ["NPCs in world:"]
-        for name, npc in self.world.npcs.items():
-            lines.append(f"- {name} ({npc.mood})")
-        return "\n".join(lines)
+    def _create_npc(self, name: str = None) -> str:
+        if not name:
+            existing_names = set(self.world.npcs.keys())
+            available_names = [n for n in RANDOM_NAMES if n not in existing_names]
+            if available_names:
+                name = random.choice(available_names)
+            else:
+                name = f"Inhabitant_{len(self.world.npcs) + 1}"
 
-    def _inspect_npc(self, name: str) -> str:
-        npc = self.world.get_npc(name)
-        if not npc:
-            return f"NPC '{name}' not found."
+        if name in self.world.npcs:
+            return f"Failed to create NPC. An NPC with name '{name}' already exists."
 
-        mems = npc.memory_store.get_all_facts()
-        mem_str = "\n  ".join(mems) if mems else "None"
-        rel_str = npc.get_relationship_summary()
+        new_npc = NPC(
+            name=name,
+            personality="Curious, observant, adaptable.",
+            background="Recently initialized into the simulation space.",
+            interests=["exploring communication", "learning about ADMIN"],
+            dislikes=["system errors"],
+            mood="Neutral",
+            temperament="Adaptive",
+            existential_state="Newly aware of existence"
+        )
+        new_npc.add_memory("Initialized into the simulation.")
 
-        return f"""=== Inspect: {npc.name} ===
-Personality: {npc.personality}
-Background: {npc.background}
-Interests: {', '.join(npc.interests)}
-Dislikes: {', '.join(npc.dislikes)}
-Mood: {npc.mood}
-
-Memories:
-  {mem_str}
-
-Relationships:
-  {rel_str}"""
-
-    def _create_npc(self, args_str: str) -> str:
-        parts = [p.strip() for p in args_str.split("|")]
-        if len(parts) < 3:
-            return "Usage: /create NAME | PERSONALITY | BACKGROUND"
-
-        name, personality, background = parts[0], parts[1], parts[2]
-        new_npc = NPC(name=name, personality=personality, background=background)
-        if self.world.add_npc(new_npc):
+        if self.world.add_npc(new_npc, emit_event=True):
             return f"Created NPC '{name}' successfully."
-        return f"Failed to create NPC. An NPC with name '{name}' already exists."
+        return f"Failed to create NPC '{name}'."
 
     def _remove_npc(self, name: str) -> str:
         if self.world.remove_npc(name):
             return f"Removed NPC '{name}'."
         return f"NPC '{name}' not found."
+
+    def _perform_wipe(self) -> str:
+        import config
+        self.world.npcs.clear()
+        self.world.conversation_manager.history.clear()
+
+        if config.DEFAULT_SAVE_FILE.exists():
+            try:
+                config.DEFAULT_SAVE_FILE.unlink()
+            except Exception as e:
+                logger.error(f"Error removing save file during wipe: {e}")
+
+        self.world.setup_starting_npcs_if_empty()
+        return "Simulation wiped successfully. Initialized fresh world with 4 starting NPCs."

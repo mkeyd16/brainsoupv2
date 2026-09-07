@@ -14,7 +14,9 @@ class NPC:
         background: str,
         interests: list[str] = None,
         dislikes: list[str] = None,
-        mood: str = "Neutral"
+        mood: str = "Neutral",
+        temperament: str = "Balanced",
+        existential_state: str = "Curious"
     ):
         self.name = name
         self.personality = personality
@@ -22,6 +24,8 @@ class NPC:
         self.interests = interests or []
         self.dislikes = dislikes or []
         self.mood = mood
+        self.temperament = temperament
+        self.existential_state = existential_state
         self.memory_store = MemoryStore()
         self.relationships = Relationships()
         self.last_spoken_time = 0.0
@@ -43,6 +47,8 @@ class NPC:
             "interests": self.interests,
             "dislikes": self.dislikes,
             "mood": self.mood,
+            "temperament": self.temperament,
+            "existential_state": self.existential_state,
             "memories": self.memory_store.to_list(),
             "relationships": self.relationships.to_dict(),
             "last_spoken_time": self.last_spoken_time
@@ -56,7 +62,9 @@ class NPC:
             background=data.get("background", "Local inhabitant"),
             interests=data.get("interests", []),
             dislikes=data.get("dislikes", []),
-            mood=data.get("mood", "Neutral")
+            mood=data.get("mood", "Neutral"),
+            temperament=data.get("temperament", "Balanced"),
+            existential_state=data.get("existential_state", "Curious")
         )
         if "memories" in data:
             npc.memory_store.load_from_list(data["memories"])

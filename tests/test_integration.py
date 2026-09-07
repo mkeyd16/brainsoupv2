@@ -7,13 +7,14 @@ from storage.save_manager import SaveManager
 from ai.inference import InferenceEngine
 
 class MockInferenceEngine(InferenceEngine):
-    def generate_npc_response(self, npc_name, personality, background, interests, dislikes, mood, memories, relationships_summary, recent_chat_history, max_retries=2):
+    def generate_npc_response(self, npc_name, personality, background, interests, dislikes, mood, temperament, existential_state, memories, relationships_summary, recent_chat_history, max_retries=2):
         return f"I am {npc_name} and I hear you loud and clear!"
 
 class TestIntegrationSimulation(unittest.TestCase):
     def test_full_simulation_flow(self):
         mock_ai = MockInferenceEngine()
         world = World(inference_engine=mock_ai)
+        world.setup_starting_npcs_if_empty()
         world.scheduler.cooldown_seconds = 0.05
         world.scheduler.start()
 
@@ -37,11 +38,11 @@ class TestIntegrationSimulation(unittest.TestCase):
             self.assertTrue(any("Secret meeting" in m["text"] for m in finn_vis))
             self.assertFalse(any("Secret meeting" in m["text"] for m in sarah_vis))
 
-            create_res = cmd.execute_command("/create Clara | Cheerful | Baker")
-            self.assertIn("Clara", create_res)
+            create_res = cmd.execute_command("/create Hugo")
+            self.assertIn("Hugo", create_res)
 
-            clara = world.get_npc("Clara")
-            clara.add_memory("Baked fresh sourdough bread.")
+            hugo = world.get_npc("Hugo")
+            hugo.add_memory("Baked fresh sourdough bread.")
 
             save_res = cmd.execute_command("/save integration_world.json")
             self.assertIn("successfully", save_res)
@@ -50,8 +51,8 @@ class TestIntegrationSimulation(unittest.TestCase):
             load_res = CommandHandler(new_world).execute_command("/load integration_world.json")
             self.assertIn("successfully", load_res)
 
-            self.assertIn("Clara", new_world.npcs)
-            self.assertEqual(new_world.get_npc("Clara").get_relevant_memories()[0], "Baked fresh sourdough bread.")
+            self.assertIn("Hugo", new_world.npcs)
+            self.assertEqual(new_world.get_npc("Hugo").get_relevant_memories()[0], "Baked fresh sourdough bread.")
 
         finally:
             world.scheduler.stop()

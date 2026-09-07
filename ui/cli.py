@@ -21,18 +21,24 @@ class TerminalUI:
 
             if is_whisper:
                 print(f"\n[WHISPER {sender} -> {recipient}]: {text}")
+            elif sender == "[SERVER]":
+                print(f"\n{text}")
             else:
-                print(f"\n[{sender}]: {text}")
+                print(f"\n{sender.upper()}\n{text}")
             print("> ", end="", flush=True)
 
     def start(self):
         print("==================================================")
         print("              WRLD.V2 AI SIMULATION               ")
         print("==================================================")
-        print("Type your message to talk publicly.")
-        print("Type commands starting with '/' (e.g. /help, /whisper NPC message).")
+        print("User Identity: ADMIN")
+        print("Type your message to communicate with the world.")
+        print("Type slash commands (e.g. /help, /cmds, /whisper NPC message).")
         print("Type /exit or /quit to exit application.")
         print("--------------------------------------------------\n")
+
+        # Ensure starting 4 NPCs if fresh world
+        self.world.setup_starting_npcs_if_empty()
 
         print("> ", end="", flush=True)
 
@@ -51,7 +57,11 @@ class TerminalUI:
                     self.is_running = False
                     break
 
-                if user_input.startswith("/"):
+                if self.cmd_handler.pending_wipe:
+                    result = self.cmd_handler.execute_command(user_input)
+                    print(f"\n[SYSTEM]: {result}")
+                    print("> ", end="", flush=True)
+                elif user_input.startswith("/"):
                     result = self.cmd_handler.execute_command(user_input)
                     print(f"\n[SYSTEM]: {result}")
                     print("> ", end="", flush=True)

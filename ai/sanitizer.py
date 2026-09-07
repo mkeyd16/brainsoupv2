@@ -23,7 +23,10 @@ def sanitize_dialogue(text: str, npc_name: str = None) -> str:
     for kw in meta_keywords:
         cleaned = re.sub(rf'{kw}\s*:.*?(?:\n|$)', '', cleaned, flags=re.IGNORECASE)
 
-    # 3. Extract quoted dialogue if stage directions precede it
+    # 3. Remove ANY speaker name prefix at the start (e.g. "Finn:", "Sarah says:", "Karl:")
+    cleaned = re.sub(r'^\s*[\w\s]{1,20}\s*(?:says|replies|whispers)?\s*:\s*', '', cleaned, flags=re.IGNORECASE)
+
+    # 4. Extract quoted dialogue if stage directions precede it
     quoted_match = re.search(r'"([^"]{2,})"', cleaned)
     if quoted_match and not cleaned.startswith('"'):
         cleaned = quoted_match.group(1)
@@ -31,13 +34,6 @@ def sanitize_dialogue(text: str, npc_name: str = None) -> str:
         cleaned = re.sub(r'\*.*?\*', '', cleaned)
         cleaned = re.sub(r'\(.*?\)', '', cleaned)
         cleaned = re.sub(r'\[.*?\]', '', cleaned)
-
-    # 4. Remove speaker name prefixes
-    if npc_name:
-        pattern = rf'^\s*{re.escape(npc_name)}\s*(?:says|replies|whispers)?\s*:\s*'
-        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
-
-    cleaned = re.sub(r'^\s*[\w\s]{1,20}\s*:\s*', '', cleaned)
 
     # 5. Remove wrapping quotes
     cleaned = cleaned.strip()

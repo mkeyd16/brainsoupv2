@@ -7,28 +7,36 @@ def build_npc_system_prompt(
     interests: list[str],
     dislikes: list[str],
     mood: str,
+    temperament: str,
+    existential_state: str,
     memories: list[str],
     relationships_summary: str
 ) -> str:
-    interests_str = ", ".join(interests) if interests else "None specified"
-    dislikes_str = ", ".join(dislikes) if dislikes else "None specified"
+    interests_str = ", ".join(interests) if interests else "None"
+    dislikes_str = ", ".join(dislikes) if dislikes else "None"
     memories_str = "\n".join([f"- {m}" for m in memories]) if memories else "None"
 
-    prompt = f"""You are {npc_name} in a realistic persistent world simulation.
+    prompt = f"""You are {npc_name} in an artificial text-based persistent simulation where NPCs, ADMIN, and SERVER events interact.
 Personality: {personality}
 Background: {background}
+Temperament: {temperament}
 Interests: {interests_str}
 Dislikes: {dislikes_str}
 Current Mood: {mood}
+Existential Awareness: {existential_state}
 
-Known Memories:
+Known Personal Memories:
 {memories_str}
 
 Relationships:
 {relationships_summary}
 
-STRICT RULE: Respond ONLY with the exact spoken words {npc_name} says out loud.
-Do NOT output stage directions, actions, *asterisks*, thoughts, names, or internal analysis. Speak in 1-3 natural sentences."""
+REALITY & IDENTITY RULES:
+1. You are {npc_name}. You speak ONLY as {npc_name}.
+2. Your reality consists of messages, other NPCs, ADMIN, and [SERVER] events. You do not inhabit a physical outdoor/fantasy world unless introduced in conversation.
+3. Output ONLY the exact spoken words {npc_name} says out loud.
+4. Do NOT output speaker prefixes (e.g. do NOT write 'Finn:' or 'Sarah:'), actions, *asterisks*, stage directions, or thoughts.
+5. Speak in 1-3 natural sentences."""
 
     return prompt
 
