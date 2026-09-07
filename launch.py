@@ -2,7 +2,6 @@ import sys
 import os
 from pathlib import Path
 
-# Ensure project root is in sys.path before importing local modules
 PROJECT_ROOT = Path(__file__).parent.resolve()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -21,7 +20,7 @@ SUPPORTED_PYTHON_MAX = (3, 13)
 OFFICIAL_PYTHON_ZIP_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
-PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.30/llama_cpp_python-0.3.30-py3-none-win_amd64.whl"
+PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.3.35/llama_cpp_python-0.3.35-py3-none-win_amd64.whl"
 
 def check_python_version(sys_version_info=None) -> bool:
     version_info = sys_version_info or sys.version_info

@@ -1,6 +1,11 @@
 import os
 import logging
 
+# Ensure AVX-512 is disabled in GGML/llama.cpp environment to prevent
+# 0xc000001d (illegal instruction) crashes on CPUs with disabled AVX-512 (e.g. Intel Core 3 N355 / E-cores)
+os.environ["GGML_AVX512"] = "0"
+os.environ["LLAMA_AVX512"] = "0"
+
 try:
     from llama_cpp import Llama
 except ImportError:
@@ -43,13 +48,14 @@ class ModelManager:
                 n_ctx=config.N_CTX,
                 n_threads=config.N_THREADS,
                 n_batch=config.N_BATCH,
+                n_gpu_layers=0,  # Strict CPU inference to prevent unsupported GPU driver / ISA crashes
                 verbose=False
             )
             self.is_loaded = True
             logger.info("Model successfully loaded into memory.")
             return True
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            logger.error(f"Failed to load model from {path}: {e}", exc_info=True)
             self.is_loaded = False
             return False
 
