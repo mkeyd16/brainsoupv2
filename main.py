@@ -44,7 +44,9 @@ def start_autosave_loop(world: World, stop_event: threading.Event):
 def main():
     print("Initializing wrld.v2 persistent society...\n")
 
-    verify_and_setup_environment()
+    if not verify_and_setup_environment():
+        print("ERROR: Environment setup failed. Cannot start wrld.v2.")
+        sys.exit(1)
 
     model_mgr = ModelManager.get_instance()
     if not model_mgr.load_model(str(config.MODEL_PATH)):
@@ -65,7 +67,6 @@ def main():
     auto_thread.start()
     autosave_thread.start()
 
-    # Launch Desktop GUI Window
     ui = TkinterUI(world)
     try:
         ui.start()

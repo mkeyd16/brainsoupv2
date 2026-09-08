@@ -11,20 +11,30 @@ echo ==================================================
 echo Starting wrld.v2...
 echo ==================================================
 
-:: 1. Check if local .venv already exists and has a supported Python (3.10 - 3.12)
+:: 1. Check if local .venv already exists and has a valid Python
 set "VENV_PYTHON=%PROJECT_DIR%.venv\Scripts\python.exe"
 
 if exist "%VENV_PYTHON%" (
-    "%VENV_PYTHON%" -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
+    "%VENV_PYTHON%" -c "import sys, tkinter; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
     if !ERRORLEVEL! EQU 0 (
         echo Using existing local virtual environment .venv...
         goto RUN_BOOTSTRAP
-    ) else (
-        echo Existing .venv uses an unsupported Python version. Re-creating .venv...
     )
 )
 
-:: 2. Search for installed supported Python on system (3.12, 3.11, 3.10)
+:: 2. Check if local bootstrapped runtime exists and is valid
+set "BOOTSTRAP_PYTHON=%PROJECT_DIR%runtime\python312\python.exe"
+
+if exist "%BOOTSTRAP_PYTHON%" (
+    "%BOOTSTRAP_PYTHON%" -c "import sys, tkinter; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
+    if !ERRORLEVEL! EQU 0 (
+        echo Using existing bootstrapped Python runtime in runtime\python312...
+        set "VENV_PYTHON=%BOOTSTRAP_PYTHON%"
+        goto RUN_BOOTSTRAP
+    )
+)
+
+:: 3. Search for installed supported Python on system PATH (3.12, 3.11, 3.10)
 set "FOUND_PYTHON="
 
 call :TRY_PY_LAUNCHER 3.12
@@ -48,7 +58,7 @@ if defined FOUND_PYTHON goto CREATE_VENV
 call :TRY_EXEC python
 if defined FOUND_PYTHON goto CREATE_VENV
 
-:: 3. If no supported Python is found on system PATH, launch.py will automatically download official Python 3.12
+:: 4. If no supported Python is found on system PATH, launch.py will automatically download official Python 3.12
 echo No supported Python found on system PATH. launch.py will automatically download Python 3.12...
 set "VENV_PYTHON=python"
 goto RUN_BOOTSTRAP
@@ -94,7 +104,7 @@ pause
 exit /b 0
 
 :TRY_PY_LAUNCHER
-py -%1 -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
+py -%1 -c "import sys, tkinter; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
 if !ERRORLEVEL! EQU 0 (
     set "FOUND_PYTHON=py -%1"
 )
@@ -103,7 +113,7 @@ exit /b 0
 :TRY_EXEC
 where %1 >nul 2>nul
 if !ERRORLEVEL! NEQ 0 exit /b 0
-%1 -c "import sys; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
+%1 -c "import sys, tkinter; sys.exit(0 if (3, 10) <= sys.version_info < (3, 13) else 1)" >nul 2>nul
 if !ERRORLEVEL! EQU 0 (
     set "FOUND_PYTHON=%1"
 )
