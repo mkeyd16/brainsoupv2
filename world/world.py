@@ -235,14 +235,22 @@ class World:
         # Find candidates who haven't spoken recently and weren't the last speaker
         candidates = [
             npc for name, npc in self.npcs.items()
-            if (now - npc.last_spoken_time) > 25.0 and name != self.conversation_manager.last_speaker
+            if (now - npc.last_spoken_time) > 20.0 and npc.agent_id != self.conversation_manager.last_speaker_id
         ]
 
-        if candidates and random.random() < 0.2:
+        if candidates and random.random() < 0.25:
             chosen = random.choice(candidates)
             recent_vis = self.conversation_manager.get_visible_history_for_participant(chosen.name)
             last_text = recent_vis[-1]["text"] if recent_vis else ""
-            self._enqueue_npc_speech(chosen, is_whisper=False, trigger_text=last_text)
+            # Autonomous tick lets the NPC express personal plans, observations, or initiate topics
+            self._enqueue_npc_speech(
+                chosen,
+                is_whisper=False,
+                recipient=None,
+                recipient_id=None,
+                trigger_text=last_text,
+                is_direct_user_request=False
+            )
 
     def _enqueue_npc_speech(
         self,
