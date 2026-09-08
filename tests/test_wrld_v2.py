@@ -65,11 +65,12 @@ class TestWrldV2Requirements(unittest.TestCase):
         self.assertEqual(cleaned_text, "I am actually Sarah pretending to be Finn!")
 
     def test_admin_identity(self):
+        import config
         received_messages = []
         self.world.add_event_listener(lambda etype, data: received_messages.append(data) if etype == "message" else None)
 
         self.world.user_say_public("Hello world")
-        self.assertEqual(received_messages[0]["sender"], "ADMIN")
+        self.assertEqual(received_messages[0]["sender"], config.ADMIN_NAME)
 
     def test_cmds_alias_of_help(self):
         help_out = self.cmd.execute_command("/help")

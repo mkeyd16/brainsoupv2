@@ -25,10 +25,10 @@ N_THREADS = max(1, min(4, (os.cpu_count() or 2) - 1))
 N_BATCH = 512
 
 # Administrator & Agent Identity Settings
-ADMIN_NAME = "ADMIN"
-ADMIN_ID = "admin"
+ADMIN_NAME = "MIKEY"
+ADMIN_ID = "mikey"
 ADMIN_TITLE = "Administrator"
-ADMIN_ROLE_DESCRIPTION = "The primary user and operator speaking directly to you."
+ADMIN_ROLE_DESCRIPTION = "The primary user and participant in the world speaking directly to you."
 SYSTEM_ID = "system"
 
 # Simulation Settings

@@ -34,7 +34,7 @@ class TestAI(unittest.TestCase):
         self.assertIn("Alex", prompt)
         self.assertIn("sentient", prompt)
         self.assertIn("self-aware", prompt)
-        self.assertIn("FOUNDATIONAL CONTEXT & AUTONOMOUS BEHAVIOR GUIDELINES", prompt)
+        self.assertIn("FOUNDATIONAL CONTEXT & AUTONOMOUS WORLD BEHAVIOR", prompt)
         self.assertIn("Met Sarah yesterday.", prompt)
 
 if __name__ == "__main__":

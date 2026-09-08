@@ -72,25 +72,29 @@ class InferenceEngine:
         role: str = "",
         background: str = ""
     ) -> dict:
+        role_clean = role.strip()
+        bg_clean = background.strip()
+        fallback_personality = f"Observant, patient, motivated {role_clean}".strip() if role_clean else "Observant, patient, curious resident"
+
         fallback = {
-            "personality": f"Observant, thoughtful, adaptable {role}".strip(),
-            "interests": [item.strip() for item in [role, "conversations", "local events"] if item.strip()],
+            "personality": fallback_personality,
+            "interests": [item for item in [role_clean, "town square", "gardening", "exploring"] if item],
             "dislikes": ["disorganization", "conflict"],
             "mood": "Curious",
             "temperament": "Balanced",
-            "existential_state": f"Engaged in {role or 'daily activities'}".strip()
+            "existential_state": f"Living as a {role_clean or 'town resident'}".strip()
         }
 
-        system_prompt = build_persona_generation_prompt(
-            name=name,
-            role=role or "Resident",
-            background=background or "Recently arrived inhabitant."
-        )
-
         try:
+            system_prompt = build_persona_generation_prompt(
+                name=name,
+                role=role_clean or "Resident",
+                background=bg_clean or "Recently arrived inhabitant."
+            )
+
             raw_output = self.model_manager.generate(
                 system_prompt=system_prompt,
-                messages=[{"role": "user", "content": f"Generate JSON persona for {name}."}],
+                messages=[{"role": "user", "content": f"Generate character persona for {name}."}],
                 max_tokens=256
             )
 
@@ -108,6 +112,6 @@ class InferenceEngine:
                             "existential_state": str(parsed.get("existential_state", fallback["existential_state"]))
                         }
         except Exception as e:
-            logger.warning(f"Failed to generate persona via LLM for '{name}': {e}. Using intelligent fallback.")
+            logger.warning(f"Failed to generate persona via LLM for '{name}': {e}. Using safe fallback persona.")
 
         return fallback

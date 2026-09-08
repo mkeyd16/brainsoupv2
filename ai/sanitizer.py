@@ -23,8 +23,10 @@ def sanitize_dialogue(text: str, npc_name: str = None) -> str:
     for kw in meta_keywords:
         cleaned = re.sub(rf'{kw}\s*:.*?(?:\n|$)', '', cleaned, flags=re.IGNORECASE)
 
-    # 3. Remove ANY speaker name prefix at the start (e.g. "Finn:", "Sarah says:", "Karl:")
-    cleaned = re.sub(r'^\s*[\w\s]{1,20}\s*(?:says|replies|whispers)?\s*:\s*', '', cleaned, flags=re.IGNORECASE)
+    # 3. Strip any colon corruptions, leading colons, or speaker name prefixes at the start
+    cleaned = re.sub(r'^[\s:]+', '', cleaned)
+    cleaned = re.sub(r'^\s*\[?\b[\w\s]{1,20}\b\]?\s*(?:says|replies|whispers)?\s*[:\s]+\s*', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'^[\s:]+', '', cleaned)
 
     # 4. Extract quoted dialogue if stage directions precede it
     quoted_match = re.search(r'"([^"]{2,})"', cleaned)
