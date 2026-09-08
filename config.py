@@ -24,6 +24,13 @@ N_CTX = 2048
 N_THREADS = max(1, min(4, (os.cpu_count() or 2) - 1))
 N_BATCH = 512
 
+# Administrator & Agent Identity Settings
+ADMIN_NAME = "ADMIN"
+ADMIN_ID = "admin"
+ADMIN_TITLE = "Administrator"
+ADMIN_ROLE_DESCRIPTION = "The primary user and operator speaking directly to you."
+SYSTEM_ID = "system"
+
 # Simulation Settings
 MESSAGE_COOLDOWN_SECONDS = 5.0  # Application-level minimum cooldown between NPC messages
 AUTOSAVE_INTERVAL_SECONDS = 60.0

@@ -7,7 +7,7 @@ from storage.save_manager import SaveManager
 from ai.inference import InferenceEngine
 
 class MockInferenceEngine(InferenceEngine):
-    def generate_npc_response(self, npc_name, personality, background, interests, dislikes, mood, temperament, existential_state, memories, relationships_summary, recent_chat_history, max_retries=2):
+    def generate_npc_response(self, npc_name, personality, background, interests, dislikes, mood, temperament, existential_state, memories, relationships_summary, recent_chat_history, agent_id=None, max_retries=2, stream_callback=None):
         return f"I am {npc_name} and I hear you loud and clear!"
 
 class TestIntegrationSimulation(unittest.TestCase):

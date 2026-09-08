@@ -16,9 +16,11 @@ class NPC:
         dislikes: list[str] = None,
         mood: str = "Neutral",
         temperament: str = "Balanced",
-        existential_state: str = "Curious"
+        existential_state: str = "Curious",
+        agent_id: str = None
     ):
         self.name = name
+        self.agent_id = agent_id or name.lower().replace(" ", "_")
         self.personality = personality
         self.background = background
         self.interests = interests or []
@@ -42,6 +44,7 @@ class NPC:
     def to_dict(self) -> dict:
         return {
             "name": self.name,
+            "agent_id": self.agent_id,
             "personality": self.personality,
             "background": self.background,
             "interests": self.interests,
@@ -56,8 +59,11 @@ class NPC:
 
     @classmethod
     def from_dict(cls, data: dict) -> "NPC":
+        name = data.get("name", "Unknown")
+        agent_id = data.get("agent_id", name.lower().replace(" ", "_"))
         npc = cls(
-            name=data.get("name", "Unknown"),
+            name=name,
+            agent_id=agent_id,
             personality=data.get("personality", "Friendly"),
             background=data.get("background", "Local inhabitant"),
             interests=data.get("interests", []),

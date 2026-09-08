@@ -20,8 +20,8 @@ class SimulationScheduler:
     def set_message_callback(self, callback):
         self.message_callback = callback
 
-    def enqueue_action(self, action_func, npc_name: str, *args, **kwargs):
-        self.action_queue.put((action_func, npc_name, args, kwargs))
+    def enqueue_action(self, action_func, npc_name: str, is_direct_user_request: bool = False, *args, **kwargs):
+        self.action_queue.put((action_func, npc_name, is_direct_user_request, args, kwargs))
 
     def pause(self):
         with self._lock:
@@ -57,11 +57,12 @@ class SimulationScheduler:
             except queue.Empty:
                 continue
 
-            action_func, npc_name, args, kwargs = action_tuple
+            action_func, npc_name, is_direct_user_request, args, kwargs = action_tuple
 
             now = time.time()
             elapsed = now - self.last_message_time
-            if elapsed < self.cooldown_seconds:
+            # Direct user requests bypass background idle cooldowns to minimize response latency
+            if not is_direct_user_request and elapsed < self.cooldown_seconds:
                 wait_time = self.cooldown_seconds - elapsed
                 time.sleep(wait_time)
 

@@ -23,8 +23,11 @@ class InferenceEngine:
         memories: list[str],
         relationships_summary: str,
         recent_chat_history: list[dict],
-        max_retries: int = 2
+        agent_id: str = None,
+        max_retries: int = 2,
+        stream_callback = None
     ) -> str:
+        resolved_agent_id = agent_id or npc_name.lower().replace(" ", "_")
         system_prompt = build_npc_system_prompt(
             npc_name=npc_name,
             personality=personality,
@@ -35,10 +38,15 @@ class InferenceEngine:
             temperament=temperament,
             existential_state=existential_state,
             memories=memories,
-            relationships_summary=relationships_summary
+            relationships_summary=relationships_summary,
+            agent_id=resolved_agent_id
         )
 
-        formatted_messages = format_chat_history(recent_chat_history, target_npc_name=npc_name)
+        formatted_messages = format_chat_history(
+            recent_chat_history,
+            target_npc_name=npc_name,
+            target_agent_id=resolved_agent_id
+        )
 
         for attempt in range(max_retries):
             raw_output = self.model_manager.generate(

@@ -53,5 +53,34 @@ class TestWorld(unittest.TestCase):
         time_diff = results[1][0] - results[0][0]
         self.assertGreaterEqual(time_diff, 0.08)
 
+    def test_agent_self_message_exclusion_and_ai_to_ai_triggering(self):
+        from world.world import World
+        from ai.inference import InferenceEngine
+
+        class EchoAI(InferenceEngine):
+            def generate_npc_response(self, npc_name, personality, background, interests, dislikes, mood, temperament, existential_state, memories, relationships_summary, recent_chat_history, agent_id=None, max_retries=2, stream_callback=None):
+                return f"Echo from {npc_name}"
+
+        world = World(inference_engine=EchoAI())
+        world.setup_starting_npcs_if_empty()
+
+        # 1. Verify KARL's message does NOT trigger KARL
+        candidates_for_karl_msg = [
+            npc for name, npc in world.npcs.items()
+            if npc.agent_id != "karl"
+        ]
+        self.assertNotIn("Karl", [c.name for c in candidates_for_karl_msg])
+        self.assertIn("Sarah", [c.name for c in candidates_for_karl_msg])
+        self.assertIn("Finn", [c.name for c in candidates_for_karl_msg])
+
+        # 2. Verify ALICE's message does NOT trigger ALICE
+        world.add_npc(NPC(name="Alice", personality="Smart", background="Coder"))
+        candidates_for_alice_msg = [
+            npc for name, npc in world.npcs.items()
+            if npc.agent_id != "alice"
+        ]
+        self.assertNotIn("Alice", [c.name for c in candidates_for_alice_msg])
+        self.assertIn("Karl", [c.name for c in candidates_for_alice_msg])
+
 if __name__ == "__main__":
     unittest.main()
