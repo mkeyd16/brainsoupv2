@@ -13,7 +13,12 @@ import config
 SUPPORTED_PYTHON_MIN = (3, 10)
 SUPPORTED_PYTHON_MAX = (3, 13)
 
-OFFICIAL_PYTHON_STANDALONE_TAR_URL = "https://github.com/indygreg/python-build-standalone/releases/download/20241206/cpython-3.12.8+20241206-x86_64-pc-windows-msvc-shared-install_only.tar.gz"
+PYTHON_BOOTSTRAP_URLS = [
+    "https://github.com/indygreg/python-build-standalone/releases/download/20241206/cpython-3.12.8+20241206-x86_64-pc-windows-msvc-shared-install_only.tar.gz",
+    "https://github.com/indygreg/python-build-standalone/releases/download/20241016/cpython-3.12.7+20241016-x86_64-pc-windows-msvc-shared-install_only.tar.gz",
+    "https://github.com/indygreg/python-build-standalone/releases/download/20240814/cpython-3.12.5+20240814-x86_64-pc-windows-msvc-shared-install_only.tar.gz"
+]
+OFFICIAL_PYTHON_STANDALONE_TAR_URL = PYTHON_BOOTSTRAP_URLS[0]
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 
 PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
@@ -130,7 +135,7 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int = 0) -> b
 
     try:
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=15) as response:
             status_code = getattr(response, "status", 200)
 
             if "Range" in headers and status_code == 200:
@@ -164,7 +169,13 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int = 0) -> b
                         last_report_time = now
 
     except Exception as e:
-        print(f"Download error encountered for {url}: {e}")
+        print(f"==================================================")
+        print(f"NETWORK ERROR: Failed to download file from URL:")
+        print(f"URL: {url}")
+        print(f"Error Details: {e}")
+        print("Network connection timed out or failed.")
+        print("Note: Valid existing runtimes remain untouched.")
+        print("==================================================")
 
     if part_path.exists():
         actual_size = part_path.stat().st_size
@@ -172,6 +183,10 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int = 0) -> b
             part_path.rename(dest_path)
             return True
         else:
+            try:
+                part_path.unlink()
+            except Exception:
+                pass
             return False
     return False
 
@@ -205,12 +220,23 @@ def bootstrap_official_python() -> str:
     tmp_target_python = PYTHON_RUNTIME_TMP / ("python.exe" if sys.platform == "win32" else "python")
 
     print("No valid supported Python 3.10-3.12 runtime with Tkinter found.")
-    print("Downloading standalone official Python 3.12.8 distribution (with Tkinter)...")
+    print("Downloading standalone official Python 3.12 distribution (with Tkinter)...")
 
-    archive_path = config.RUNTIME_DIR / "cpython-3.12.8-windows.tar.gz"
-    success = download_file_with_resume(OFFICIAL_PYTHON_STANDALONE_TAR_URL, archive_path, min_size=15 * 1024 * 1024)
+    archive_path = config.RUNTIME_DIR / "cpython-3.12-windows.tar.gz"
+    success = False
+    for url in PYTHON_BOOTSTRAP_URLS:
+        print(f"Attempting download from: {url}")
+        if download_file_with_resume(url, archive_path, min_size=15 * 1024 * 1024):
+            success = True
+            break
+        print(f"Endpoint failed. Trying fallback URL...")
+
     if not success:
-        print("ERROR: Failed to download official Python 3.12 standalone package.")
+        print("==================================================")
+        print("ERROR: All Python 3.12 bootstrap download endpoints failed due to network errors.")
+        print("Please check your internet connection and retry running startup.bat.")
+        print("Existing runtimes were preserved.")
+        print("==================================================")
         return None
 
     print(f"Extracting Python 3.12 runtime into {PYTHON_RUNTIME_TMP}...")

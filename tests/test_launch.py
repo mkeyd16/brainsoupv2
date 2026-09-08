@@ -163,8 +163,8 @@ class TestLaunchBootstrap(unittest.TestCase):
             dest = Path(tmpdir) / "model.gguf"
 
             import urllib.request
-            def mock_raise(req, timeout=30):
-                raise urllib.error.URLError("Connection refused")
+            def mock_raise(req, timeout=15):
+                raise urllib.error.URLError("WinError 10060 Connection timed out")
 
             original_urlopen = urllib.request.urlopen
             try:
@@ -174,6 +174,23 @@ class TestLaunchBootstrap(unittest.TestCase):
                 self.assertFalse(dest.exists())
             finally:
                 urllib.request.urlopen = original_urlopen
+
+    @patch("launch.PYTHON_RUNTIME_DIR")
+    @patch("launch.download_file_with_resume")
+    def test_bootstrap_network_failure_preserves_runtime(self, mock_download, mock_runtime_dir):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime_dir = Path(tmpdir) / "python312"
+            runtime_dir.mkdir()
+            mock_runtime_dir.exists.return_value = True
+            mock_runtime_dir.__truediv__.return_value = runtime_dir / "python.exe"
+
+            mock_download.return_value = False
+
+            with patch("launch.validate_python_environment", return_value=(False, {"stderr": "Fail"})):
+                res = bootstrap_official_python()
+                self.assertIsNone(res)
+                # Ensure runtime_dir was not deleted/corrupted by network failure
+                self.assertTrue(runtime_dir.exists())
 
 if __name__ == "__main__":
     unittest.main()
