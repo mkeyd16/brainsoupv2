@@ -8,6 +8,11 @@ class TestAI(unittest.TestCase):
         cleaned = sanitize_dialogue(raw, npc_name="Finn")
         self.assertEqual(cleaned, "Hey, what's up?")
 
+    def test_sanitize_colon_and_metadata_leak(self):
+        raw = ':::: FINN / agent_id=finn]: I am heading toward the valley.'
+        cleaned = sanitize_dialogue(raw, npc_name="Finn")
+        self.assertEqual(cleaned, "I am heading toward the valley.")
+
     def test_sanitize_dialogue_think_block(self):
         raw = '<think>I should greet the user warmly.</think> Finn: Hello there! Nice to meet you.'
         cleaned = sanitize_dialogue(raw, npc_name="Finn")

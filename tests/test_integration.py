@@ -29,14 +29,11 @@ class TestIntegrationSimulation(unittest.TestCase):
 
             self.assertGreater(len(received_messages), 1)
 
-            world.user_whisper("Finn", "Secret meeting at noon.")
+            world.user_say_public("Hello town residents!")
             time.sleep(0.3)
 
             finn_vis = world.conversation_manager.get_visible_history_for_participant("Finn")
-            sarah_vis = world.conversation_manager.get_visible_history_for_participant("Sarah")
-
-            self.assertTrue(any("Secret meeting" in m["text"] for m in finn_vis))
-            self.assertFalse(any("Secret meeting" in m["text"] for m in sarah_vis))
+            self.assertTrue(any("Hello town residents!" in m["text"] for m in finn_vis))
 
             create_res = cmd.execute_command("/create Hugo")
             self.assertIn("Hugo", create_res)

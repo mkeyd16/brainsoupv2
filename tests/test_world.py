@@ -17,19 +17,14 @@ class TestWorld(unittest.TestCase):
         self.assertEqual(restored.name, "Finn")
         self.assertEqual(len(restored.memory_store.memories), 1)
 
-    def test_whisper_privacy_routing(self):
-        cm = ConversationManager()
-        cm.add_message(sender="Finn", text="Public hello", is_whisper=False)
-        cm.add_message(sender="Finn", text="Secret whisper to Sarah", recipient="Sarah", is_whisper=True)
+    def test_unknown_whisper_command(self):
+        from world.world import World
+        from world.commands import CommandHandler
 
-        # Sarah sees the whisper
-        sarah_view = cm.get_visible_history_for_participant("Sarah")
-        self.assertEqual(len(sarah_view), 2)
-
-        # Marcus should NOT see the whisper
-        marcus_view = cm.get_visible_history_for_participant("Marcus")
-        self.assertEqual(len(marcus_view), 1)
-        self.assertEqual(marcus_view[0]["text"], "Public hello")
+        world = World()
+        cmd = CommandHandler(world)
+        res = cmd.execute_command("/whisper Sarah hello")
+        self.assertIn("Unknown command", res)
 
     def test_scheduler_cooldown(self):
         scheduler = SimulationScheduler(cooldown_seconds=0.1) # Fast deterministic 0.1s for test

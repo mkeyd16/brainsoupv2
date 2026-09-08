@@ -11,8 +11,6 @@ class TkinterUI:
     def __init__(self, world: World):
         self.world = world
         self.cmd_handler = CommandHandler(world)
-        self.selected_whisper_npc = None
-
         # Root Window Setup
         self.root = tk.Tk()
         self.root.title("WRLD.V2 — Persistent AI Simulation")
@@ -69,11 +67,10 @@ class TkinterUI:
             highlightthickness=0
         )
         self.npc_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        self.npc_listbox.bind("<<ListboxSelect>>", self.on_npc_select)
 
         hint_label = tk.Label(
             sidebar_frame,
-            text="Click NPC to whisper\nUser: ADMIN",
+            text="Active Simulation NPCs",
             font=("Helvetica", 9, "italic"),
             bg=self.bg_sidebar,
             fg=self.accent_color,
@@ -101,7 +98,6 @@ class TkinterUI:
         self.chat_display.tag_config("ADMIN", foreground=self.admin_color, font=("Helvetica", 11, "bold"))
         self.chat_display.tag_config("SERVER", foreground=self.server_color, font=("Helvetica", 11, "bold"))
         self.chat_display.tag_config("NPC_NAME", foreground="#b5179e", font=("Helvetica", 11, "bold"))
-        self.chat_display.tag_config("WHISPER", foreground="#f15bb5", font=("Helvetica", 11, "italic"))
         self.chat_display.tag_config("BODY", foreground=self.text_color, font=("Helvetica", 11))
         self.chat_display.tag_config("SYSTEM", foreground="#e0aaff", font=("Helvetica", 11, "italic"))
 
@@ -145,28 +141,14 @@ class TkinterUI:
             mood = f" ({npc.mood})" if npc else ""
             self.npc_listbox.insert(tk.END, f"{name}{mood}")
 
-    def on_npc_select(self, event):
-        selection = self.npc_listbox.curselection()
-        if selection:
-            item_text = self.npc_listbox.get(selection[0])
-            npc_name = item_text.split()[0]
-            self.selected_whisper_npc = npc_name
-            current_input = self.input_entry.get()
-            if not current_input.startswith("/"):
-                self.input_entry.delete(0, tk.END)
-                self.input_entry.insert(0, f"/whisper {npc_name} ")
-                self.input_entry.focus_set()
-
-    def append_message(self, sender: str, text: str, is_whisper: bool = False, recipient: str = None):
+    def append_message(self, sender: str, text: str, recipient: str = None):
         self.chat_display.config(state=tk.NORMAL)
+        admin_name = getattr(config, "ADMIN_NAME", "MIKEY")
 
         if sender == "[SERVER]":
             self.chat_display.insert(tk.END, f"\n{text}\n", "SERVER")
-        elif is_whisper:
-            self.chat_display.insert(tk.END, f"\n[WHISPER {sender} -> {recipient}]: ", "WHISPER")
-            self.chat_display.insert(tk.END, f"{text}\n", "BODY")
-        elif sender == "ADMIN":
-            self.chat_display.insert(tk.END, "\nADMIN\n", "ADMIN")
+        elif sender == admin_name or sender == "ADMIN":
+            self.chat_display.insert(tk.END, f"\n{admin_name}\n", "ADMIN")
             self.chat_display.insert(tk.END, f"{text}\n", "BODY")
         else:
             self.chat_display.insert(tk.END, f"\n{sender.upper()}\n", "NPC_NAME")
@@ -187,9 +169,8 @@ class TkinterUI:
         elif event_type == "message":
             sender = data.get("sender", "Unknown")
             text = data.get("text", "")
-            is_whisper = data.get("is_whisper", False)
             recipient = data.get("recipient")
-            self.root.after(0, self.append_message, sender, text, is_whisper, recipient)
+            self.root.after(0, self.append_message, sender, text, recipient)
 
     def send_message(self):
         user_input = self.input_entry.get().strip()

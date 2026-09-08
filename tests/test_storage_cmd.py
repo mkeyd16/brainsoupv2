@@ -56,5 +56,20 @@ class TestStorageAndCommands(unittest.TestCase):
         resume_out = self.cmd.execute_command("/resume")
         self.assertFalse(self.world.scheduler.is_paused)
 
+    def test_npc_generated_text_cannot_execute_commands(self):
+        # Even if an NPC outputs text starting with '/', on_npc_message_generated strictly routes it as dialogue
+        self.world.on_npc_message_generated({
+            "sender": "Finn",
+            "sender_id": "finn",
+            "sender_type": "agent",
+            "text": "/help and /wipe and /create Bob"
+        })
+
+        hist = self.world.conversation_manager.history
+        last_msg = hist[-1]
+        self.assertEqual(last_msg.sender, "Finn")
+        self.assertEqual(last_msg.text, "/help and /wipe and /create Bob")
+        self.assertFalse(self.world.scheduler.is_paused)
+
 if __name__ == "__main__":
     unittest.main()

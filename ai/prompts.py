@@ -74,7 +74,7 @@ Generate a JSON object matching this EXACT format (do not output any markdown fo
 
 def format_chat_history(messages: list[dict], target_npc_name: str, target_agent_id: str = None) -> list[dict]:
     formatted = []
-    admin_name = getattr(config, "ADMIN_NAME", "ADMIN")
+    admin_name = getattr(config, "ADMIN_NAME", "MIKEY")
     admin_title = getattr(config, "ADMIN_TITLE", "Administrator")
     resolved_target_id = target_agent_id or target_npc_name.lower().replace(" ", "_")
 
@@ -82,28 +82,18 @@ def format_chat_history(messages: list[dict], target_npc_name: str, target_agent
         sender = msg.get('sender', 'Someone')
         sender_id = msg.get('sender_id') or sender.lower().replace(" ", "_")
         text = msg.get('text', '')
-        is_whisper = msg.get('is_whisper', False)
-        recipient = msg.get('recipient')
-        sender_type = msg.get('sender_type', 'admin' if sender == admin_name else ('system' if sender == '[SERVER]' else 'agent'))
+        sender_type = msg.get('sender_type', 'admin' if sender in [admin_name, "ADMIN"] else ('system' if sender == '[SERVER]' else 'agent'))
 
         is_self = (sender_id == resolved_target_id) or (sender == target_npc_name)
 
-        if is_whisper:
-            if is_self:
-                content = f"[You whispered to {recipient}]: {text}"
-            elif sender_type == 'admin':
-                content = f"[{admin_name} ({admin_title}) whispered to you]: {text}"
-            else:
-                content = f"[{sender} (agent_id={sender_id}) whispered to you]: {text}"
+        if is_self:
+            content = f"[You spoken / agent_id={resolved_target_id}]: {text}"
+        elif sender_type == 'admin' or sender in [admin_name, "ADMIN"]:
+            content = f"{admin_name} ({admin_title}): {text}"
+        elif sender_type == 'system' or sender == '[SERVER]':
+            content = f"System Event: {text}"
         else:
-            if is_self:
-                content = f"[You spoken / agent_id={resolved_target_id}]: {text}"
-            elif sender_type == 'admin':
-                content = f"{admin_name} ({admin_title}): {text}"
-            elif sender_type == 'system' or sender == '[SERVER]':
-                content = f"System Event: {text}"
-            else:
-                content = f"{sender} (agent_id={sender_id}): {text}"
+            content = f"{sender} (agent_id={sender_id}): {text}"
 
         role = "assistant" if is_self else "user"
         formatted.append({"role": role, "content": content})

@@ -14,7 +14,6 @@ class Message:
         sender_type: str = None,  # "admin", "agent", or "system"
         recipient: str = None,
         recipient_id: str = None,
-        is_whisper: bool = False,
         timestamp: float = None,
         msg_id: str = None,
         source_type: str = None,  # Legacy alias ("USER", "AGENT", "SYSTEM")
@@ -29,7 +28,6 @@ class Message:
         self.text = text
         self.recipient = recipient
         self.recipient_id = recipient_id or (recipient.lower().replace(" ", "_") if recipient else None)
-        self.is_whisper = is_whisper
         self.timestamp = timestamp if timestamp is not None else time.time()
         self.processed = processed
 
@@ -64,7 +62,6 @@ class Message:
             "text": self.text,
             "recipient": self.recipient,
             "recipient_id": self.recipient_id,
-            "is_whisper": self.is_whisper,
             "timestamp": self.timestamp,
             "source_type": self.source_type,
             "processed": self.processed
@@ -86,7 +83,6 @@ class Message:
             text=data.get("text", ""),
             recipient=data.get("recipient"),
             recipient_id=data.get("recipient_id"),
-            is_whisper=data.get("is_whisper", False),
             timestamp=data.get("timestamp"),
             source_type=data.get("source_type"),
             processed=data.get("processed", False)
@@ -107,7 +103,6 @@ class ConversationManager:
         sender_type: str = None,
         recipient: str = None,
         recipient_id: str = None,
-        is_whisper: bool = False,
         source_type: str = None
     ) -> Message:
         clean_text = text.strip()
@@ -126,7 +121,6 @@ class ConversationManager:
             text=clean_text,
             recipient=recipient,
             recipient_id=recipient_id,
-            is_whisper=is_whisper,
             source_type=source_type
         )
         self.history.append(msg)
@@ -137,17 +131,7 @@ class ConversationManager:
         return msg
 
     def get_visible_history_for_participant(self, participant_name: str, limit: int = config.MAX_PROMPT_HISTORY) -> list[dict]:
-        visible = []
-        for msg in reversed(self.history):
-            if msg.is_whisper:
-                if msg.sender == participant_name or msg.recipient == participant_name:
-                    visible.append(msg.to_dict())
-            else:
-                visible.append(msg.to_dict())
-
-            if len(visible) >= limit:
-                break
-
+        visible = [msg.to_dict() for msg in reversed(self.history[:limit])]
         return list(reversed(visible))
 
     def to_list(self) -> list[dict]:

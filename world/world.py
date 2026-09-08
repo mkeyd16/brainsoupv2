@@ -20,6 +20,21 @@ class World:
         self.event_listeners = []
         self.active_generating_npc = None
 
+    def wipe_all_state(self):
+        self.npcs.clear()
+        self.conversation_manager.history.clear()
+        self.active_generating_npc = None
+
+        import config
+        if config.SAVE_DIR.exists():
+            for f in config.SAVE_DIR.glob("*.json"):
+                try:
+                    f.unlink()
+                except Exception as e:
+                    logger.error(f"Error removing save file {f} during wipe: {e}")
+
+        self.setup_starting_npcs_if_empty()
+
     def setup_starting_npcs_if_empty(self):
         if not self.npcs:
             finn = NPC(
@@ -112,7 +127,6 @@ class World:
         msg = self.conversation_manager.add_message(
             sender="[SERVER]",
             text=server_msg_text,
-            is_whisper=False,
             source_type="SYSTEM"
         )
         self.notify_event("message", msg.to_dict())
@@ -125,36 +139,10 @@ class World:
         msg = self.conversation_manager.add_message(
             sender=admin_name,
             text=text,
-            is_whisper=False,
             source_type="USER"
         )
         self.notify_event("message", msg.to_dict())
         self.trigger_npc_responses(trigger_text=text, sender_name=admin_name, is_user=True)
-
-    def user_whisper(self, target_npc_name: str, text: str) -> bool:
-        npc = self.get_npc(target_npc_name)
-        if not npc:
-            return False
-
-        admin_name = getattr(config, "ADMIN_NAME", "ADMIN")
-        msg = self.conversation_manager.add_message(
-            sender=admin_name,
-            text=text,
-            recipient=target_npc_name,
-            is_whisper=True,
-            source_type="USER"
-        )
-        self.notify_event("message", msg.to_dict())
-
-        npc.add_memory(f"{admin_name} whispered: '{text[:60]}'")
-        self._enqueue_npc_speech(
-            npc,
-            is_whisper=True,
-            recipient=admin_name,
-            trigger_text=text,
-            is_direct_user_request=True
-        )
-        return True
 
     def trigger_npc_responses(
         self,
@@ -197,7 +185,6 @@ class World:
             chosen = mentioned_npcs[0]
             self._enqueue_npc_speech(
                 chosen,
-                is_whisper=False,
                 recipient=sender_name,
                 recipient_id=sender_id,
                 trigger_text=trigger_text,
@@ -220,7 +207,6 @@ class World:
             chosen = random.choice(turn_candidates)
             self._enqueue_npc_speech(
                 chosen,
-                is_whisper=False,
                 recipient=sender_name,
                 recipient_id=sender_id,
                 trigger_text=trigger_text,
@@ -245,7 +231,6 @@ class World:
             # Autonomous tick lets the NPC express personal plans, observations, or initiate topics
             self._enqueue_npc_speech(
                 chosen,
-                is_whisper=False,
                 recipient=None,
                 recipient_id=None,
                 trigger_text=last_text,
@@ -255,7 +240,6 @@ class World:
     def _enqueue_npc_speech(
         self,
         npc: NPC,
-        is_whisper: bool = False,
         recipient: str = None,
         recipient_id: str = None,
         trigger_text: str = "",
@@ -304,7 +288,6 @@ class World:
                     "text": reply_text,
                     "recipient": recipient,
                     "recipient_id": recipient_id,
-                    "is_whisper": is_whisper,
                     "source_type": "AGENT"
                 }
             return None
@@ -328,18 +311,16 @@ class World:
             text=msg_dict["text"],
             recipient=msg_dict.get("recipient"),
             recipient_id=msg_dict.get("recipient_id"),
-            is_whisper=msg_dict.get("is_whisper", False),
             source_type="AGENT"
         )
         msg.processed = True
         self.notify_event("message", msg.to_dict())
 
-        # Trigger potential AI-to-AI follow-up if not a whisper
-        if not msg.is_whisper:
-            self.trigger_npc_responses(
-                trigger_text=msg.text,
-                sender_name=sender_name,
-                sender_id=sender_id,
-                is_user=False,
-                probability=0.35
-            )
+        # Trigger potential AI-to-AI follow-up
+        self.trigger_npc_responses(
+            trigger_text=msg.text,
+            sender_name=sender_name,
+            sender_id=sender_id,
+            is_user=False,
+            probability=0.35
+        )

@@ -10,8 +10,8 @@
 - **Single Shared LLM Instance**: One loaded model handles dialogue for all NPCs, minimizing RAM usage to fit comfortably under **2.5 GB total RAM**.
 - **Speech-Only AI Output**: Post-processing sanitizer guarantees NPCs only output spoken words—never stage directions, `<think>` blocks, or internal metadata.
 - **Autonomous NPC Society**: NPCs initiate conversations, respond to world events, and interact based on individual personalities, moods, memories, and relationships.
-- **Strict Whisper Privacy**: Private messages (`/whisper`) are strictly visible only to sender and recipient.
-- **Enforced Cooldown**: Global 4.0-second minimum message cooldown managed by a central application-level scheduler.
+- **Shared Autonomous World**: Public conversations where NPCs communicate with MIKEY and each other naturally.
+- **Enforced Cooldown**: Global 3.0-second minimum message cooldown managed by a central application-level scheduler.
 - **Persistent State**: Save and load world state, NPC memories, and relationships atomically.
 - **One-Click Startup**: Windows `startup.bat` automatically checks, downloads, verifies, and launches everything.
 
@@ -52,12 +52,9 @@ In the interactive prompt, type `/` followed by a command:
 | `/load [filename]` | Load saved world state |
 | `/pause` | Pause autonomous NPC activity |
 | `/resume` | Resume autonomous NPC activity |
-| `/whisper NPC_NAME MESSAGE` | Send a private message to a specific NPC |
-| `/npcs` | List all current NPCs in the world and their moods |
-| `/inspect NPC_NAME` | Inspect an NPC's background, personality, memories, and relationships |
-| `/create NAME \| PERS \| BG` | Create a new NPC (e.g. `/create Clara \| Gentle \| Florist`) |
+| `/create NAME \| ROLE \| BG` | Create a new NPC with generated persona (e.g. `/create Clara \| Florist \| Loves plants`) |
 | `/remove NPC_NAME` | Remove an NPC from the world |
-| `/quit` or `/exit` | Save world state and exit application |
+| `/wipe` | Completely reset simulation state and clear all save files |
 
 ---
 
@@ -79,10 +76,10 @@ wrld.v2/
 ├── world/                    # Simulation Logic & Scheduling
 │   ├── world.py              # World engine managing simulation logic
 │   ├── npc.py                # NPC identity, personality & state
-│   ├── conversation.py       # Message router & whisper privacy manager
-│   ├── scheduler.py          # Central turn scheduler enforcing 4.0s cooldown
+│   ├── conversation.py       # Message router & history manager
+│   ├── scheduler.py          # Central turn scheduler enforcing 3.0s cooldown
 │   ├── relationships.py      # NPC-to-NPC relationship manager
-│   └── commands.py           # Command handler (/whisper, /save, /load, etc.)
+│   └── commands.py           # Command handler (/save, /load, /create, /wipe, etc.)
 ├── memory/                   # Memory System
 │   ├── memory_store.py       # NPC fact memory storage with internal tag filters
 │   └── memory_retrieval.py   # Compact top-K memory retriever

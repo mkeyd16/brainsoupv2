@@ -49,16 +49,6 @@ class CommandHandler:
         elif cmd == "/wipe":
             self.pending_wipe = True
             return "WARNING: /wipe will erase all current NPCs, memories, relationships, and save data.\nType 'YES' to confirm wipe or any other input to cancel."
-        elif cmd == "/whisper":
-            if len(parts) < 3:
-                return "Usage: /whisper NPC_NAME MESSAGE"
-            target_npc = parts[1]
-            message = parts[2]
-            success = self.world.user_whisper(target_npc, message)
-            if success:
-                return f"[Whisper sent to {target_npc}]: {message}"
-            else:
-                return f"NPC '{target_npc}' not found."
         elif cmd == "/create":
             return self._create_npc(args if args else None)
         elif cmd == "/remove":
@@ -72,11 +62,13 @@ class CommandHandler:
         return """Available Commands:
 /help                     - Show this help menu
 /cmds                     - Show this help menu (alias for /help)
-/create [NAME]            - Create a new NPC (optional name, e.g. /create or /create Karl)
+/create NAME | ROLE | BG  - Create a new NPC with generated persona (e.g. /create Clara | Florist | Loves plants)
 /remove NPC_NAME          - Remove an NPC from the simulation
 /save [filename]          - Save current world state
-/wipe                     - Clear all persistent simulation data (requires confirmation)
-/whisper NPC_NAME MESSAGE - Send a private whisper to an NPC"""
+/load [filename]          - Load saved world state
+/pause                    - Pause the simulation
+/resume                   - Resume the simulation
+/wipe                     - Completely reset simulation state and clear all save files"""
 
     def _save(self, filename: str = None) -> str:
         import config
@@ -147,15 +139,5 @@ class CommandHandler:
         return f"NPC '{name}' not found."
 
     def _perform_wipe(self) -> str:
-        import config
-        self.world.npcs.clear()
-        self.world.conversation_manager.history.clear()
-
-        if config.DEFAULT_SAVE_FILE.exists():
-            try:
-                config.DEFAULT_SAVE_FILE.unlink()
-            except Exception as e:
-                logger.error(f"Error removing save file during wipe: {e}")
-
-        self.world.setup_starting_npcs_if_empty()
-        return "Simulation wiped successfully. Initialized fresh world with 4 starting NPCs."
+        self.world.wipe_all_state()
+        return "Simulation wiped successfully. Initialized fresh world with starting NPCs."
