@@ -1,7 +1,9 @@
+import json
+import re
 import logging
 import config
 from ai.model import ModelManager
-from ai.prompts import build_npc_system_prompt, format_chat_history
+from ai.prompts import build_npc_system_prompt, build_persona_generation_prompt, format_chat_history
 from ai.sanitizer import sanitize_dialogue
 
 logger = logging.getLogger("wrld.ai.inference")
@@ -63,3 +65,49 @@ class InferenceEngine:
             logger.warning(f"Generation attempt {attempt + 1} for '{npc_name}' produced empty output after sanitization.")
 
         return "I'm not sure what to say to that."
+
+    def generate_npc_persona(
+        self,
+        name: str,
+        role: str = "",
+        background: str = ""
+    ) -> dict:
+        fallback = {
+            "personality": f"Observant, thoughtful, adaptable {role}".strip(),
+            "interests": [item.strip() for item in [role, "conversations", "local events"] if item.strip()],
+            "dislikes": ["disorganization", "conflict"],
+            "mood": "Curious",
+            "temperament": "Balanced",
+            "existential_state": f"Engaged in {role or 'daily activities'}".strip()
+        }
+
+        system_prompt = build_persona_generation_prompt(
+            name=name,
+            role=role or "Resident",
+            background=background or "Recently arrived inhabitant."
+        )
+
+        try:
+            raw_output = self.model_manager.generate(
+                system_prompt=system_prompt,
+                messages=[{"role": "user", "content": f"Generate JSON persona for {name}."}],
+                max_tokens=256
+            )
+
+            if raw_output:
+                json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+                if json_match:
+                    parsed = json.loads(json_match.group(0))
+                    if isinstance(parsed, dict) and "personality" in parsed:
+                        return {
+                            "personality": str(parsed.get("personality", fallback["personality"])),
+                            "interests": list(parsed.get("interests", fallback["interests"])),
+                            "dislikes": list(parsed.get("dislikes", fallback["dislikes"])),
+                            "mood": str(parsed.get("mood", fallback["mood"])),
+                            "temperament": str(parsed.get("temperament", fallback["temperament"])),
+                            "existential_state": str(parsed.get("existential_state", fallback["existential_state"]))
+                        }
+        except Exception as e:
+            logger.warning(f"Failed to generate persona via LLM for '{name}': {e}. Using intelligent fallback.")
+
+        return fallback

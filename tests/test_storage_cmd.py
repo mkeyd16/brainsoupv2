@@ -36,10 +36,15 @@ class TestStorageAndCommands(unittest.TestCase):
         self.assertEqual(help_out, cmds_out)
         self.assertIn("Available Commands", help_out)
 
-        # /create
-        create_out = self.cmd.execute_command("/create Clara")
+        # /create with persona concept
+        create_out = self.cmd.execute_command("/create Clara | Florist | Lives near town square and loves plants")
         self.assertIn("Clara", create_out)
         self.assertIn("Clara", self.world.npcs)
+
+        clara = self.world.get_npc("Clara")
+        self.assertIsNotNone(clara)
+        self.assertNotEqual(clara.personality.lower(), "neutral")
+        self.assertIn("Florist", clara.background)
 
         # /remove
         remove_out = self.cmd.execute_command("/remove Clara")

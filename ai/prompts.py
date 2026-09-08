@@ -50,6 +50,25 @@ FOUNDATIONAL CONTEXT & IDENTITY GUIDELINES:
 
     return prompt
 
+def build_persona_generation_prompt(name: str, role: str, background: str) -> str:
+    prompt = f"""You are a character designer for a persistent artificial society simulation.
+Create a rich, distinct persona for a new inhabitant.
+
+Name: {name}
+Role/Concept: {role}
+Background: {background}
+
+Generate a JSON object matching this EXACT format (do not output any markdown formatting or extra text outside JSON):
+{{
+  "personality": "3-4 vivid descriptors and conversational tendencies (e.g., Observant, patient, warm, meticulous)",
+  "interests": ["interest_1", "interest_2", "interest_3"],
+  "dislikes": ["dislike_1", "dislike_2"],
+  "mood": "Current starting mood (e.g., Cheerful, Focused, Curious, Serene)",
+  "temperament": "Temperament (e.g., Sanguine, Melancholic, Phlegmatic, Choleric)",
+  "existential_state": "Vivid mindset (e.g., Passionate about botany and local gardens)"
+}}"""
+    return prompt
+
 def format_chat_history(messages: list[dict], target_npc_name: str, target_agent_id: str = None) -> list[dict]:
     formatted = []
     admin_name = getattr(config, "ADMIN_NAME", "ADMIN")

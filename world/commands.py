@@ -27,8 +27,10 @@ class CommandHandler:
         if not raw_command.startswith("/"):
             return "Commands must start with '/'"
 
-        parts = raw_command.strip().split(maxsplit=2)
+        full_cmd = raw_command.strip()
+        parts = full_cmd.split(maxsplit=1)
         cmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
 
         if cmd in ["/help", "/cmds"]:
             return self._help_and_cmds()
@@ -58,8 +60,7 @@ class CommandHandler:
             else:
                 return f"NPC '{target_npc}' not found."
         elif cmd == "/create":
-            name_arg = parts[1] if len(parts) > 1 else None
-            return self._create_npc(name_arg)
+            return self._create_npc(args if args else None)
         elif cmd == "/remove":
             if len(parts) < 2:
                 return "Usage: /remove NPC_NAME"
@@ -91,7 +92,19 @@ class CommandHandler:
             return f"World loaded successfully from {save_file.name}."
         return f"Failed to load world state from {save_file.name}."
 
-    def _create_npc(self, name: str = None) -> str:
+    def _create_npc(self, name_arg: str = None) -> str:
+        name = None
+        role = ""
+        background = ""
+
+        if name_arg and "|" in name_arg:
+            parts = [p.strip() for p in name_arg.split("|")]
+            name = parts[0] if parts else None
+            role = parts[1] if len(parts) > 1 else ""
+            background = parts[2] if len(parts) > 2 else role
+        elif name_arg:
+            name = name_arg.strip()
+
         if not name:
             existing_names = set(self.world.npcs.keys())
             available_names = [n for n in RANDOM_NAMES if n not in existing_names]
@@ -103,20 +116,29 @@ class CommandHandler:
         if name in self.world.npcs:
             return f"Failed to create NPC. An NPC with name '{name}' already exists."
 
+        bg_text = f"{role}. {background}".strip(" .") if (role and background) else (role or background or "A new inhabitant in the town.")
+
+        # Generate persona ONCE via LLM during creation
+        persona = self.world.inference_engine.generate_npc_persona(
+            name=name,
+            role=role,
+            background=bg_text
+        )
+
         new_npc = NPC(
             name=name,
-            personality="Curious, observant, adaptable.",
-            background="Recently initialized into the simulation space.",
-            interests=["exploring communication", "learning about ADMIN"],
-            dislikes=["system errors"],
-            mood="Neutral",
-            temperament="Adaptive",
-            existential_state="Newly aware of existence"
+            personality=persona.get("personality", "Observant, patient, warm"),
+            background=bg_text,
+            interests=persona.get("interests", [role] if role else ["local events"]),
+            dislikes=persona.get("dislikes", ["disorganization"]),
+            mood=persona.get("mood", "Curious"),
+            temperament=persona.get("temperament", "Balanced"),
+            existential_state=persona.get("existential_state", f"Engaged as {role or 'resident'}")
         )
-        new_npc.add_memory("Initialized into the simulation.")
+        new_npc.add_memory(f"Joined the simulation as {role or 'resident'}.")
 
         if self.world.add_npc(new_npc, emit_event=True):
-            return f"Created NPC '{name}' successfully."
+            return f"Created NPC '{name}' ({persona.get('personality')}) successfully."
         return f"Failed to create NPC '{name}'."
 
     def _remove_npc(self, name: str) -> str:
