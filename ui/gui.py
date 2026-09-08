@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import threading
 import logging
+import config
 from world.world import World
 from world.commands import CommandHandler
 
