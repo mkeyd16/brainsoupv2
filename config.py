@@ -32,7 +32,7 @@ ADMIN_ROLE_DESCRIPTION = "The primary user and operator speaking directly to you
 SYSTEM_ID = "system"
 
 # Simulation Settings
-MESSAGE_COOLDOWN_SECONDS = 5.0  # Application-level minimum cooldown between NPC messages
+MESSAGE_COOLDOWN_SECONDS = 3.0  # Application-level minimum cooldown between NPC messages
 AUTOSAVE_INTERVAL_SECONDS = 60.0
 AUTONOMOUS_TICK_INTERVAL_SECONDS = 2.0  # How often scheduler checks for NPC actions
 

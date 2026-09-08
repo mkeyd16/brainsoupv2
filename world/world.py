@@ -176,19 +176,23 @@ class World:
             else:
                 sender_id = sender_name.lower().replace(" ", "_")
 
-        # CRITICAL SELF-MESSAGE DETECTION:
+        # 1. SELF-RESPONSE PREVENTION:
         # Exclude candidates whose agent_id matches sender_id (KARL → KARL is 100% blocked).
-        # AI-to-AI communication IS ALLOWED: KARL → ALICE, ALICE → KARL, etc.
-        candidates = [
+        eligible = [
             npc for name, npc in self.npcs.items()
             if npc.agent_id != sender_id
         ]
 
-        if not candidates:
+        if not eligible:
             return
 
-        # Explicitly mentioned NPC gets priority
-        mentioned_npcs = [npc for npc in candidates if npc.name.lower() in trigger_text.lower() or npc.agent_id in trigger_text.lower()]
+        # 2. DIRECT QUESTION / MENTION PRIORITY:
+        # If an NPC is directly addressed (e.g., "Alice, what do you think?"), prioritize that specific NPC.
+        mentioned_npcs = [
+            npc for npc in eligible
+            if npc.name.lower() in trigger_text.lower() or npc.agent_id in trigger_text.lower()
+        ]
+
         if mentioned_npcs:
             chosen = mentioned_npcs[0]
             self._enqueue_npc_speech(
@@ -201,9 +205,19 @@ class World:
             )
             return
 
-        # If trigger is from USER, always respond. If from AGENT, respond with probability to allow multi-agent flow without continuous flood.
+        # 3. NATURAL TURN-TAKING POLICY:
+        # Prefer participants other than the most recent speaker if other eligible agents exist.
+        last_speaker_id = self.conversation_manager.last_speaker_id
+        turn_candidates = [
+            npc for npc in eligible
+            if npc.agent_id != last_speaker_id
+        ]
+        # Fall back to all eligible candidates if no other speaker exists
+        if not turn_candidates:
+            turn_candidates = eligible
+
         if is_user or random.random() < probability:
-            chosen = random.choice(candidates)
+            chosen = random.choice(turn_candidates)
             self._enqueue_npc_speech(
                 chosen,
                 is_whisper=False,
@@ -309,6 +323,7 @@ class World:
             is_whisper=msg_dict.get("is_whisper", False),
             source_type="AGENT"
         )
+        msg.processed = True
         self.notify_event("message", msg.to_dict())
 
         # Trigger potential AI-to-AI follow-up if not a whisper
