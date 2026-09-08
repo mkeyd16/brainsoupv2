@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import urllib.request
 import zipfile
+import tarfile
 import time
 import importlib
 from pathlib import Path
@@ -12,7 +13,7 @@ import config
 SUPPORTED_PYTHON_MIN = (3, 10)
 SUPPORTED_PYTHON_MAX = (3, 13)
 
-OFFICIAL_PYTHON_ZIP_URL = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip"
+OFFICIAL_PYTHON_STANDALONE_TAR_URL = "https://github.com/indygreg/python-build-standalone/releases/download/20241206/cpython-3.12.8+20241206-x86_64-pc-windows-msvc-shared-install_only.tar.gz"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 
 PYTHON_RUNTIME_DIR = config.RUNTIME_DIR / "python312"
@@ -22,7 +23,13 @@ PREBUILT_LLAMA_CPP_WHEEL_URL = "https://github.com/abetlen/llama-cpp-python/rele
 def validate_python_environment(exec_cmd) -> tuple[bool, dict]:
     """
     Single authoritative function to validate a Python executable.
-    Supports single strings, Paths, or list commands (e.g. ['py', '-3.12']).
+    Checks:
+    1. Executable exists.
+    2. Runs python --version and checks version is 3.10 <= version < 3.13.
+    3. Verifies 64-bit architecture.
+    4. Verifies Tkinter is importable.
+    5. Verifies pip is available.
+    Returns (is_valid, diagnostic_dict)
     """
     diag = {
         "executable": str(exec_cmd),
@@ -60,15 +67,15 @@ def validate_python_environment(exec_cmd) -> tuple[bool, dict]:
     diag["exists"] = True
 
     test_script = (
-        "import sys, struct, importlib.util\n"
+        "import sys, struct\n"
         "is_64 = (struct.calcsize('P') * 8) == 64\n"
         "is_ver = (3, 10) <= sys.version_info < (3, 13)\n"
-        "has_tk = importlib.util.find_spec('tkinter') is not None\n"
-        "has_pip = importlib.util.find_spec('pip') is not None\n"
-        "print(f'VER={sys.version.split()[0]}')\n"
-        "print(f'64BIT={is_64}')\n"
-        "print(f'TKINTER={has_tk}')\n"
-        "print(f'PIP={has_pip}')\n"
+        "has_tk = False\n"
+        "try:\n"
+        "    import tkinter\n"
+        "    has_tk = True\n"
+        "except Exception:\n"
+        "    pass\n"
         "sys.exit(0 if (is_64 and is_ver and has_tk) else 1)\n"
     )
 
@@ -169,6 +176,11 @@ def download_file_with_resume(url: str, dest_path: Path, min_size: int = 0) -> b
     return False
 
 def bootstrap_official_python() -> str:
+    """
+    Atomically creates, configures, and validates Python 3.12 with Tkinter in runtime/python312.tmp
+    before replacing runtime/python312. Flattening the extracted folder ensures python.exe is directly in
+    runtime/python312/python.exe.
+    """
     target_python = PYTHON_RUNTIME_DIR / ("python.exe" if sys.platform == "win32" else "python")
 
     valid, _ = validate_python_environment(target_python)
@@ -183,34 +195,39 @@ def bootstrap_official_python() -> str:
         except Exception as e:
             print(f"Warning: Could not remove incomplete runtime directory: {e}")
 
+    if PYTHON_RUNTIME_TMP.exists():
+        try:
+            shutil.rmtree(PYTHON_RUNTIME_TMP)
+        except Exception as e:
+            print(f"Warning: Could not remove old temporary runtime directory: {e}")
+
     PYTHON_RUNTIME_TMP.mkdir(parents=True, exist_ok=True)
     tmp_target_python = PYTHON_RUNTIME_TMP / ("python.exe" if sys.platform == "win32" else "python")
 
     print("No valid supported Python 3.10-3.12 runtime with Tkinter found.")
-    print("Downloading official Python 3.12 embedded runtime...")
+    print("Downloading standalone official Python 3.12.8 distribution (with Tkinter)...")
 
-    zip_path = config.RUNTIME_DIR / "python-3.12.8-embed-amd64.zip"
-    success = download_file_with_resume(OFFICIAL_PYTHON_ZIP_URL, zip_path, min_size=5 * 1024 * 1024)
+    archive_path = config.RUNTIME_DIR / "cpython-3.12.8-windows.tar.gz"
+    success = download_file_with_resume(OFFICIAL_PYTHON_STANDALONE_TAR_URL, archive_path, min_size=15 * 1024 * 1024)
     if not success:
-        print("ERROR: Failed to download official Python 3.12 package from python.org.")
+        print("ERROR: Failed to download official Python 3.12 standalone package.")
         return None
 
     print(f"Extracting Python 3.12 runtime into {PYTHON_RUNTIME_TMP}...")
     try:
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(PYTHON_RUNTIME_TMP)
+        with tarfile.open(archive_path, "r:gz") as tar_ref:
+            tar_ref.extractall(PYTHON_RUNTIME_TMP)
 
-        pth_file = list(PYTHON_RUNTIME_TMP.glob("*._pth"))
-        if pth_file:
-            pth_path = pth_file[0]
-            content = pth_path.read_text(encoding="utf-8")
-            if "#import site" in content:
-                content = content.replace("#import site", "import site")
-                pth_path.write_text(content, encoding="utf-8")
+        extracted_sub = PYTHON_RUNTIME_TMP / "python"
+        if extracted_sub.exists() and extracted_sub.is_dir():
+            # Flatten extracted python directory so python.exe lives directly in PYTHON_RUNTIME_TMP
+            for item in extracted_sub.iterdir():
+                shutil.move(str(item), str(PYTHON_RUNTIME_TMP))
+            shutil.rmtree(extracted_sub)
 
         get_pip_path = config.RUNTIME_DIR / "get-pip.py"
         download_file_with_resume(GET_PIP_URL, get_pip_path)
-        if get_pip_path.exists():
+        if get_pip_path.exists() and tmp_target_python.exists():
             subprocess.run([str(tmp_target_python), str(get_pip_path), "--no-warn-script-location"], capture_output=True, timeout=60)
 
     except Exception as e:

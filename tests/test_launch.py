@@ -51,7 +51,7 @@ class TestLaunchBootstrap(unittest.TestCase):
 
     @patch("launch.validate_python_environment")
     def test_find_supported_python_executable_prefers_py_launcher(self, mock_validate):
-        mock_validate.side_effect = lambda cmd: (True, "OK") if "py -3.12" in str(cmd) or cmd == ["py", "-3.12"] else (False, "Fail")
+        mock_validate.side_effect = lambda cmd: (True, {"executable": "py -3.12"}) if "py -3.12" in str(cmd) or cmd == ["py", "-3.12"] else (False, {"stderr": "Fail"})
 
         v314 = (3, 14, 6)
         with patch("sys.version_info", v314):
@@ -62,7 +62,7 @@ class TestLaunchBootstrap(unittest.TestCase):
     @patch("launch.bootstrap_official_python")
     @patch("launch.validate_python_environment")
     def test_find_supported_python_executable_triggers_bootstrap_if_none_installed(self, mock_validate, mock_bootstrap, mock_runtime_dir):
-        mock_validate.return_value = (False, "Fail")
+        mock_validate.return_value = (False, {"stderr": "Fail"})
         mock_bootstrap.return_value = "/app/runtime/python312/python.exe"
 
         v314 = (3, 14, 6)
